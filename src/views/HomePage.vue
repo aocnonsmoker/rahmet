@@ -198,6 +198,7 @@ export default {
           class: "blue-event",
           split: 1,
           price: 2700,
+          duration: 1
         },
         {
           start: "2024-10-27 23:30",
@@ -208,17 +209,29 @@ export default {
           class: "green-event",
           split: 2,
           price: 3000,
-          detail: ''
+          duration: 1.5
         },
         {
           start: "2024-10-27 16:00",
-          end: "2024-10-27 18:00",
+          end: "2024-10-27 19:00",
           title: "Ербол",
           adult: 3,
           child: 0,
           class: "blue-event",
           split: 1,
           price: 6000,
+          duration: 3
+        },
+        {
+          start: "2024-10-27 20:00",
+          end: "2024-10-27 21:30",
+          title: "Ербол",
+          adult: 3,
+          child: 0,
+          class: "blue-event",
+          split: 1,
+          price: 6000,
+          duration: 1.5
         },
         {
           start: "2024-10-27 16:00",
@@ -229,6 +242,7 @@ export default {
           class: "green-event",
           split: 2,
           price: 4000,
+          duration: 2
         },
         {
           start: "2024-10-27 16:00",
@@ -239,6 +253,7 @@ export default {
           class: "orange-event",
           split: 3,
           price: 4800,
+          duration: 2
         },
         {
           start: "2024-10-27 15:00",
@@ -249,6 +264,7 @@ export default {
           class: "red-event",
           split: 4,
           price: 4000,
+          duration: 1
         },
       ],
       splitDays: [
@@ -306,53 +322,48 @@ export default {
       this.isOpen = !this.isOpen;
     },
     availableTime(split, duration) {
-      const now = this.selectedDate.split('-');
-      const year = Number(now[0]);
-      const month = Number(now[1]) - 1;
-      const day = Number(now[2]);
-      const dates = this.events.filter((event) => event.split == split);
-      const times = [];
-      for (let i = 0; i < 24; i++) {
-        if (i <= this.min_hour || i >= this.max_hour) {
-          let minut = 0;
-          let minutHalf = 30;
-          if (!Number.isInteger(duration)) {
-            minut = 30;
-            minutHalf = 0;
-          }
-          const d = {
-            start: moment(new Date(year, month, day, i, 0)).format(
-              "YYYY-MM-DD HH:mm"
-            ),
-            end: moment(
-              new Date(year, month, day, i + Math.trunc(duration), minut)
-            ).format("YYYY-MM-DD HH:mm"),
-          };
-          console.log();
-          const dHalf = {
-            start: moment(new Date(year, month, day, i, 30)).format(
-              "YYYY-MM-DD HH:mm"
-            ),
-            end: moment(
-              new Date(year, month, day, i + Math.round(duration), minutHalf)
-            ).format("YYYY-MM-DD HH:mm"),
-          };
-          const match = dates.find(
-            (item) => item.start == d.start || item.end == d.end
-          );
-          if (!match) {
-            times.push(d);
-          }
-          const matchHalf = dates.find(
-            (item) => item.start == dHalf.start || item.end == dHalf.end
-          );
-          if (!matchHalf) {
-            times.push(dHalf);
-          }
+        const now = this.selectedDate.split('-');
+        const year = Number(now[0]);
+        const month = Number(now[1]) - 1;
+        const day = Number(now[2]);
+        const dates = this.events.filter((event) => event.split == split);
+        const times = [];
+        for (let i = 0; i < 24; i++) {
+            if (i <= this.min_hour || i >= this.max_hour) {
+                let minut = 0;
+                let minutHalf = 30;
+                if (!Number.isInteger(duration)) {
+                    minut = 30;
+                    minutHalf = 0;
+                }
+                const d = {
+                    start: moment(new Date(year, month, day, i, 0)).format("YYYY-MM-DD HH:mm"),
+                    end: moment(new Date(year, month, day, i + Math.trunc(duration), minut)).format("YYYY-MM-DD HH:mm"),
+                };
+                const dHalf = {
+                    start: moment(new Date(year, month, day, i, 30)).format("YYYY-MM-DD HH:mm"),
+                    end: moment(new Date(year, month, day, i + Math.round(duration), minutHalf)).format("YYYY-MM-DD HH:mm"),
+                };
+                const match = dates.find((item) => (item.start == d.start) || (item.end == d.end) || (this.getHour(item.start) == this.getHour(d.end) && item.start < d.end));
+                const matchHalf = dates.find((item) => (item.start == dHalf.start || item.end == dHalf.end) || (this.getHour(item.start) == this.getHour(dHalf.end) && item.start < dHalf.end));
+                if (!match) {
+                    times.push(d);
+                } else {
+                    i += match.duration;
+                    continue;
+                }
+                if (!matchHalf) {
+                    times.push(dHalf);
+                } else {
+                    i += matchHalf.duration;
+                    continue;
+                }
+            }
         }
-      }
-
-      return times;
+        return times;
+    },
+    getHour(date) {
+        return date.split(' ')[1].split(':')[0]
     },
     showDate(date) {
       return moment(date).format("HH:mm");
@@ -360,8 +371,8 @@ export default {
     selectDate(split, date) {
       const classes = ['blue-event', 'green-event', 'orange-event', 'red-event']
       const newItem = {...this.newEvent, split: split, start: date.start, end: date.end, class: classes[split - 1]}
-      console.log(newItem)
-    }
+      console.log(this.events)
+    },
   },
 };
 </script>
