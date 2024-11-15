@@ -1,6 +1,6 @@
-import legacy from '@vitejs/plugin-legacy'
-import vue from '@vitejs/plugin-vue'
-import path from 'path'
+import legacy from '@vitejs/plugin-legacy';
+import vue from '@vitejs/plugin-vue';
+import path from 'path';
 
 // https://vitejs.dev/config/
 export default {
@@ -8,7 +8,8 @@ export default {
     vue({
       template: {
         compilerOptions: {
-          isCustomElement: (tag) => ['ion-buttons', 'ion-item', 'ion-datetime-button', 'ion-select-option', 'ion-select', 'ion-input'].includes(tag),
+          // Temporarily set only ion-item as a custom element
+          isCustomElement: (tag) => tag === 'ion-item' || tag === 'ion-buttons' || tag === 'ion-datetime-button',
         }
       }
     }),

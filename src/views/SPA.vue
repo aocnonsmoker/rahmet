@@ -6,14 +6,8 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content :fullscreen="true">
-      <ion-header collapse="condense">
-        <ion-toolbar>
-          <ion-title size="large">Blank</ion-title>
-        </ion-toolbar>
-      </ion-header>
-
-      <div id="container">
+    <ion-content>
+      <div>
         <ion-button expand="block" @click="setOpen(true)"
           >Добавить запись</ion-button
         >
@@ -100,16 +94,10 @@
               </ion-modal>
             </ion-item>
             <ion-item>
-              <!-- <select v-model="duration" aria-label="Time">
-                <option :value="1">на 1 час</option>
-                <option :value="2">на 2 часа</option>
-                <option :value="3">на 3 часа</option>
-              </select> -->
               <ion-select
                 @ionChange="duration=$event.target.value;"
-                label="Время1"
+                label="Время"
                 label-placement="stacked"
-                :value="1"
               >
                 <ion-select-option :value="1">На 1 час</ion-select-option>
                 <ion-select-option :value="1.5">На 1.5 часа</ion-select-option>
@@ -412,6 +400,7 @@ export default {
     cancel() {
       this.isOpen = false;
       this.showEvent = false;
+      this.duration = null;
     },
     confirm() {
         this.newEvent.id = this.events.length + 1;
