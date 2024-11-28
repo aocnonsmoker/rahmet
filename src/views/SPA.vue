@@ -14,17 +14,17 @@
         <vue-cal
           id="vuecal"
           locale="ru"
-          style="height: 75vh"
+          style="height: 83vh"
           active-view="day"
           :disable-views="['years', 'year', 'week']"
           :time-step="30"
           :events="events"
           :split-days="splitDays"
-          :watchRealTime="true"
           sticky-split-labels
           @ready="scrollToCurrentTime"
           :timeCellHeight="80"
           :on-event-click="onEventClick"
+          :watchRealTime="true"
         >
           <template #split-label="{ split }">
             <strong :style="`color: ${split.color}`">{{ split.label }}</strong>
@@ -138,7 +138,7 @@
                       :key="i"
                       size="4"
                     >
-                      <ion-button @click="selectDate(item.id, i)" color="new"
+                      <ion-button @click="selectDate(item.id, i)" :color="item.id == newEvent.split && i.start == newEvent.start ? 'selected' : 'new'" 
                         >{{ i.start.split(" ")[1] }}-{{
                           i.end.split(" ")[1]
                         }}</ion-button
@@ -203,12 +203,28 @@
                 ></ion-input>
             </ion-item>
             <ion-item>
+              <ion-select
+                v-model="selectedEvent.split"
+                @ionChange="selectedEvent.split=$event.target.value;"
+                label="Баня"
+                label-placement="stacked"
+              >
+                <ion-select-option :value="1">Баня 1</ion-select-option>
+                <ion-select-option :value="2">Баня 2</ion-select-option>
+                <ion-select-option :value="3">Баня 3</ion-select-option>
+                <ion-select-option :value="4">Баня 4</ion-select-option>
+              </ion-select>
+            </ion-item>
+            <ion-item>
                 <h1>С</h1>
                 <ion-datetime v-model="timeStartDate" presentation="date-time" :prefer-wheel="true" minuteValues="0,30"></ion-datetime>
             </ion-item>
             <ion-item>
                 <h1>До</h1>
                 <ion-datetime v-model="timeEndDate" presentation="date-time" :prefer-wheel="true" minuteValues="0,30"></ion-datetime>
+            </ion-item>
+            <ion-item>
+              <ion-button @click="deleteEvent" color="danger">Удалить</ion-button>
             </ion-item>
           </ion-content>
         </ion-modal>
@@ -235,7 +251,8 @@ import {
   IonLabel,
   IonInput,
   IonSelect,
-  IonSelectOption
+  IonSelectOption,
+  IonDatetimeButton
 } from "@ionic/vue";
 
 export default {
@@ -255,7 +272,8 @@ export default {
     IonLabel,
     IonInput,
     IonSelect,
-    IonSelectOption
+    IonSelectOption,
+    IonDatetimeButton
   },
   data() {
     return {
@@ -265,92 +283,7 @@ export default {
       datePicker: moment(new Date()).format("YYYY-MM-DD"),
       selectedDate: moment(new Date()).format("YYYY-MM-DD"),
       now: new Date(),
-      events: [
-        {
-            id: 1,
-            start: "2024-11-02 23:00",
-            end: "2024-11-03 00:00",
-            title: "87074567894",
-            adult: 2,
-            child: 1,
-            class: "blue-event",
-            split: 1,
-            price: 2700,
-            duration: 1
-        },
-        {
-            id: 2,
-            start: "2024-11-02 23:30",
-            end: "2024-11-03 01:00",
-            title: "87015468794",
-            adult: 2,
-            child: 0,
-            class: "green-event",
-            split: 2,
-            price: 3000,
-            duration: 1.5
-        },
-        {
-            id: 3,
-            start: "2024-11-02 16:00",
-            end: "2024-11-02 19:00",
-            title: "Ербол",
-            adult: 3,
-            child: 0,
-            class: "blue-event",
-            split: 1,
-            price: 6000,
-            duration: 3
-        },
-        {
-            id: 4,
-            start: "2024-11-02 20:00",
-            end: "2024-11-02 21:30",
-            title: "Ербол",
-            adult: 3,
-            child: 0,
-            class: "blue-event",
-            split: 1,
-            price: 6000,
-            duration: 1.5
-        },
-        {
-            id: 5,
-            start: "2024-11-02 16:00",
-            end: "2024-11-02 18:00",
-            title: "Анара кб",
-            adult: 2,
-            child: 0,
-            class: "green-event",
-            split: 2,
-            price: 4000,
-            duration: 2
-        },
-        {
-            id: 6,
-            start: "2024-11-02 16:00",
-            end: "2024-11-02 18:00",
-            title: "870015654987",
-            adult: 1,
-            child: 2,
-            class: "orange-event",
-            split: 3,
-            price: 4800,
-            duration: 2
-        },
-        {
-            id: 7,
-            start: "2024-11-02 15:00",
-            end: "2024-11-02 16:00",
-            title: "87471235478",
-            adult: 4,
-            child: 0,
-            class: "red-event",
-            split: 4,
-            price: 4000,
-            duration: 1
-        },
-      ],
+      events: [],
       splitDays: [
         { id: 1, color: "blue", label: "Баня 1", class: "split1" },
         { id: 2, color: "green", label: "Баня 2", class: "split2" },
@@ -382,34 +315,63 @@ export default {
 
       },
       ownHour: null,
-      ownMinut: null
+      ownMinut: null,
+      classes: ['blue-event', 'green-event', 'orange-event', 'red-event']
     };
   },
-  mounted() {
-    this.scrollToCurrentTime();
+  async mounted() {
+    await this.getEvents();
   },
   methods: {
+    async getEvents() {
+        this.events = [];
+        const response = await fetch('http://127.0.0.1:8000/events');
+        const result = await response.json();
+        for (const r of result) {
+          r.start = r.start.replace("T", " ").slice(0, -3);
+          r.end = r.end.replace("T", " ").slice(0, -3);
+          r.class = this.classes[r.split - 1]
+          this.events.push(r)
+        }
+    },
     scrollToCurrentTime() {
-      const calendar = document.querySelector("#vuecal .vuecal__bg");
-      const hours = this.now.getHours() + this.now.getMinutes() / 60;
-      calendar.scrollTo({
-        top: hours * this.timeCellHeight,
-        behavior: "smooth",
-      });
+      const calendar = document.querySelector('#vuecal');
     },
     cancel() {
       this.isOpen = false;
       this.showEvent = false;
       this.duration = null;
+      this.ownHour = null;
+      this.ownMinut = null;
     },
-    confirm() {
-        this.newEvent.id = this.events.length + 1;
-        this.events.push(this.newEvent)
+    async confirm() {
+        this.newEvent.duration = this.duration;
+        const response = await fetch('http://127.0.0.1:8000/record', {
+          method: 'post',
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(this.newEvent)
+        });
+        const result = await response.json();
+        alert(result)
+        await this.getEvents();
         this.isOpen = !this.isOpen;
+        this.cancel();
     },
-    confirmEdit() {
+    async confirmEdit() {
         this.selectedEvent.start = `${this.timeStartDate.split('T')[0]} ${this.timeStartDate.split('T')[1]}`
         this.selectedEvent.end = `${this.timeEndDate.split('T')[0]} ${this.timeEndDate.split('T')[1]}`
+        const response = await fetch('http://127.0.0.1:8000/events/' + this.selectedEvent.id, {
+          method: 'put',
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(this.selectedEvent)
+        });
+        const result = await response.json();
+        alert(result)
+        await this.getEvents();
         this.showEvent = false;
     },
     setOpen() {
@@ -425,7 +387,7 @@ export default {
         const day = Number(now[2]);
         const dates = this.events.filter((event) => (event.split == split) && (event.start.split(' ')[0] == this.selectedDate));
         const times = [];
-        let i = 0;
+        let i = this.now.getHours();
         while (i < 24) {
             if (i <= this.min_hour || i >= this.max_hour) {
                 let minut = 0;
@@ -483,6 +445,21 @@ export default {
         if (this.selectedEvent) {
             this.showEvent = true;
         }
+    },
+    async deleteEvent() {
+      const apply = confirm('Вы точно хотите удалить запись?')
+      if (apply) {
+        const response = await fetch('http://127.0.0.1:8000/events/' + this.selectedEvent.id, {
+          method: 'delete',
+          headers: {
+            "Content-Type": "application/json"
+          }
+        });
+        const result = await response.json();
+        alert(result)
+        await this.getEvents();
+        this.showEvent = false; 
+      }
     }
   },
 };
@@ -556,6 +533,7 @@ export default {
   --ion-color-new-contrast-rgb: 0, 0, 0;
   --ion-color-new-shade: #5ca56c;
   --ion-color-new-tint: #78c288;
+  --ion-color-selected: #104bc9;
 }
 
 .ion-color-new {
@@ -565,5 +543,8 @@ export default {
   --ion-color-contrast-rgb: var(--ion-color-new-contrast-rgb);
   --ion-color-shade: var(--ion-color-new-shade);
   --ion-color-tint: var(--ion-color-new-tint);
+}
+.ion-color-selected {
+  --ion-color-base: var(--ion-color-selected);
 }
 </style>
