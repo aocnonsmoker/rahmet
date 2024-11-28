@@ -325,7 +325,7 @@ export default {
   methods: {
     async getEvents() {
         this.events = [];
-        const response = await fetch('http://127.0.0.1:8000/events');
+        const response = await fetch('http://3.121.29.84/events');
         const result = await response.json();
         for (const r of result) {
           r.start = r.start.replace("T", " ").slice(0, -3);
@@ -346,7 +346,7 @@ export default {
     },
     async confirm() {
         this.newEvent.duration = this.duration;
-        const response = await fetch('http://127.0.0.1:8000/record', {
+        const response = await fetch('http://3.121.29.84/record', {
           method: 'post',
           headers: {
             "Content-Type": "application/json"
@@ -362,7 +362,7 @@ export default {
     async confirmEdit() {
         this.selectedEvent.start = `${this.timeStartDate.split('T')[0]} ${this.timeStartDate.split('T')[1]}`
         this.selectedEvent.end = `${this.timeEndDate.split('T')[0]} ${this.timeEndDate.split('T')[1]}`
-        const response = await fetch('http://127.0.0.1:8000/events/' + this.selectedEvent.id, {
+        const response = await fetch('http://3.121.29.84/events/' + this.selectedEvent.id, {
           method: 'put',
           headers: {
             "Content-Type": "application/json"
@@ -449,7 +449,7 @@ export default {
     async deleteEvent() {
       const apply = confirm('Вы точно хотите удалить запись?')
       if (apply) {
-        const response = await fetch('http://127.0.0.1:8000/events/' + this.selectedEvent.id, {
+        const response = await fetch('http://3.121.29.84/events/' + this.selectedEvent.id, {
           method: 'delete',
           headers: {
             "Content-Type": "application/json"
