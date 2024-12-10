@@ -19,12 +19,12 @@ const routes = [
         component: () => import('@/views/SPA.vue')
       },
       {
-        path: 'tab2',
+        path: 'car',
         component: () => import('@/views/CarWash.vue')
       },
       {
-        path: 'tab3',
-        component: () => import('@/views/Hotel.vue')
+        path: 'cash',
+        component: () => import('@/views/Cash.vue')
       }
     ]
   }

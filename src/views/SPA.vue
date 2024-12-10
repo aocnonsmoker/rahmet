@@ -2,7 +2,13 @@
   <ion-page>
     <ion-header :translucent="true">
       <ion-toolbar>
-        <ion-title>{{ curDate }}</ion-title>
+        <ion-buttons slot="start">
+          <ion-button @click="() => { this.tab = 1 }" color="secondary">Календарь</ion-button>
+        </ion-buttons>
+        <ion-buttons slot="end">
+          <ion-button @click="() => { this.tab = 2 }" color="secondary">Таблица  </ion-button>
+          <ion-button @click="getEvents" color="secondary">Обновить</ion-button>
+        </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
@@ -11,35 +17,61 @@
         <ion-button expand="block" @click="setOpen(true)"
           >Добавить запись</ion-button
         >
-        <vue-cal
-          id="vuecal"
-          locale="ru"
-          style="height: 83vh"
-          active-view="day"
-          :disable-views="['years', 'year', 'week']"
-          :time-step="30"
-          :events="events"
-          :split-days="splitDays"
-          sticky-split-labels
-          @ready="scrollToCurrentTime"
-          :timeCellHeight="80"
-          :on-event-click="onEventClick"
-          :watchRealTime="true"
-        >
-          <template #split-label="{ split }">
-            <strong :style="`color: ${split.color}`">{{ split.label }}</strong>
-          </template>
-          <template #event="{ event }">
-            <div v-html="event.title" />
-            {{ showDate(event.start) }}-{{ showDate(event.end) }}
-            <div>Взр: {{ event.adult }}</div>
-            <div>Дети: {{ event.child }}</div>
-            <div>
-              Сумма: <br />
-              {{ event.price }}тг.
+        <div v-if="tab == 1">
+          <vue-cal
+            id="vuecal"
+            locale="ru"
+            style="height: 83vh"
+            active-view="day"
+            :disable-views="['years', 'year', 'week']"
+            :time-step="30"
+            :events="events"
+            :split-days="splitDays"
+            sticky-split-labels
+            @ready="scrollToCurrentTime"
+            :timeCellHeight="80"
+            :on-event-click="onEventClick"
+            :watchRealTime="true"
+          >
+            <template #split-label="{ split }">
+              <strong :style="`color: ${split.color}`">{{ split.label }}</strong>
+            </template>
+            <template #event="{ event }">
+              <div v-html="event.title" />
+              {{ showDate(event.start) }}-{{ showDate(event.end) }}
+              <div>Взр: {{ event.adult }}</div>
+              <div>Дети: {{ event.child }}</div>
+              <div>
+                Сумма: <br />
+                {{ event.price }}тг.
+              </div>
+            </template>
+          </vue-cal>
+        </div>
+        <div v-else>
+          <ion-item>
+            <ion-datetime-button datetime="datetime"></ion-datetime-button>
+            <ion-modal :keep-contents-mounted="true">
+              <ion-datetime
+                id="datetime"
+                :first-day-of-week="1"
+                presentation="date"
+                :format-options="formatOptions"
+                v-model="today"
+              ></ion-datetime>
+            </ion-modal>
+          </ion-item>
+          <div v-for="i in 4" :key="i">
+            <ion-item>
+              <ion-label>Баня {{i}}</ion-label>
+            </ion-item>
+            <div v-for="item in tableList.filter(list => list.split == i)" :key="item.id">
+              <p style="margin: 10px 20px;" @click="onEventClick(item)">
+                <ion-text>{{item.start.split(' ')[1]}} - {{item.end.split(' ')[1]}} / {{item.title}} / Взр: {{item.adult}}, Дет: {{item.child}} <br> Сумма: {{item.price}}</ion-text>
+              </p>
             </div>
-          </template>
-        </vue-cal>
+          </div>
+        </div>
         <!-- Модальное окно -->
         <ion-modal :is-open="isOpen">
           <ion-header>
@@ -252,7 +284,8 @@ import {
   IonInput,
   IonSelect,
   IonSelectOption,
-  IonDatetimeButton
+  IonDatetimeButton,
+  IonText
 } from "@ionic/vue";
 
 export default {
@@ -273,7 +306,8 @@ export default {
     IonInput,
     IonSelect,
     IonSelectOption,
-    IonDatetimeButton
+    IonDatetimeButton,
+    IonText
   },
   data() {
     return {
@@ -282,6 +316,7 @@ export default {
       curDate: moment(new Date()).format("DD-MM-YYYY HH:mm"),
       datePicker: moment(new Date()).format("YYYY-MM-DD"),
       selectedDate: moment(new Date()).format("YYYY-MM-DD"),
+      today: moment(new Date()).format("YYYY-MM-DD"),
       now: new Date(),
       events: [],
       splitDays: [
@@ -312,20 +347,27 @@ export default {
         price: null,
         start: '',
         end: ''
-
       },
       ownHour: null,
       ownMinut: null,
-      classes: ['blue-event', 'green-event', 'orange-event', 'red-event']
+      classes: ['blue-event', 'green-event', 'orange-event', 'red-event'],
+      tab: 1,
+      tableList: []
     };
   },
   async mounted() {
-    await this.getEvents();
+    // await this.$nextTick(() => {
+    //   window.setInterval(() => {
+    //     this.getEvents();
+    //   }, 10000)
+    // })
+    await this.getEvents()
+    this.$watch('today', this.getEvents)
   },
   methods: {
     async getEvents() {
         this.events = [];
-        const response = await fetch('http://3.121.29.84/events');
+        const response = await fetch('http://127.0.0.1:8000/events');
         const result = await response.json();
         for (const r of result) {
           r.start = r.start.replace("T", " ").slice(0, -3);
@@ -333,9 +375,12 @@ export default {
           r.class = this.classes[r.split - 1]
           this.events.push(r)
         }
+        this.tableList = this.events.filter(a => a.start.split(' ')[0] == this.today).sort((a, b) => a.start.localeCompare(b.start));
     },
     scrollToCurrentTime() {
       const calendar = document.querySelector('#vuecal');
+      calendar.scrollTop = calendar.scrollHeight;
+      console.log('here')
     },
     cancel() {
       this.isOpen = false;
@@ -343,26 +388,40 @@ export default {
       this.duration = null;
       this.ownHour = null;
       this.ownMinut = null;
+      this.newEvent = {
+        title: '',
+        adult: null,
+        child: null,
+        split: null,
+        class: '',
+        price: null,
+        start: '',
+        end: ''
+      }
     },
     async confirm() {
         this.newEvent.duration = this.duration;
-        const response = await fetch('http://3.121.29.84/record', {
-          method: 'post',
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(this.newEvent)
-        });
-        const result = await response.json();
-        alert(result)
-        await this.getEvents();
-        this.isOpen = !this.isOpen;
-        this.cancel();
+        if (this.newEvent.title && this.newEvent.split && this.newEvent.start && this.newEvent.end) {
+          const response = await fetch('http://127.0.0.1:8000/record', {
+            method: 'post',
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(this.newEvent)
+          });
+          const result = await response.json();
+          alert(result)
+          await this.getEvents();
+          this.isOpen = !this.isOpen;
+          this.cancel(); 
+        } else {
+          alert('Заполните "Название записи" и "Время"')
+        }
     },
     async confirmEdit() {
         this.selectedEvent.start = `${this.timeStartDate.split('T')[0]} ${this.timeStartDate.split('T')[1]}`
         this.selectedEvent.end = `${this.timeEndDate.split('T')[0]} ${this.timeEndDate.split('T')[1]}`
-        const response = await fetch('http://3.121.29.84/events/' + this.selectedEvent.id, {
+        const response = await fetch('http://127.0.0.1:8000/events/' + this.selectedEvent.id, {
           method: 'put',
           headers: {
             "Content-Type": "application/json"
@@ -449,7 +508,7 @@ export default {
     async deleteEvent() {
       const apply = confirm('Вы точно хотите удалить запись?')
       if (apply) {
-        const response = await fetch('http://3.121.29.84/events/' + this.selectedEvent.id, {
+        const response = await fetch('http://127.0.0.1:8000/events/' + this.selectedEvent.id, {
           method: 'delete',
           headers: {
             "Content-Type": "application/json"
