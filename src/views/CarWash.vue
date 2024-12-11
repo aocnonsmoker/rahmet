@@ -143,7 +143,7 @@ export default {
   methods: {
     async getCar() {
       this.cars = [];
-      const response = await fetch('http://127.0.0.1:8000/car');
+      const response = await fetch('http://3.121.29.84/car');
       const result = await response.json();
       for (const r of result) {
         r.start = r.start.replace("T", " ").slice(0, -3);
@@ -152,7 +152,7 @@ export default {
       this.cars = this.cars.filter(a => a.start.split(' ')[0] == this.today).sort((a, b) => b.start.localeCompare(a.start));
     },
     async addItem() {
-      const response = await fetch('http://127.0.0.1:8000/record-car', {
+      const response = await fetch('http://3.121.29.84/record-car', {
         method: 'post',
         headers: {
           "Content-Type": "application/json"
@@ -176,7 +176,7 @@ export default {
     async confirmEdit() {
 
         this.selectedEvent.start = `${this.timeStartDate.split('T')[0]} ${this.timeStartDate.split('T')[1]}`
-        const response = await fetch('http://127.0.0.1:8000/car/' + this.selectedEvent.id, {
+        const response = await fetch('http://3.121.29.84/car/' + this.selectedEvent.id, {
           method: 'put',
           headers: {
             "Content-Type": "application/json"
@@ -191,7 +191,7 @@ export default {
     async deleteEvent() {
       const apply = confirm('Вы точно хотите удалить запись?')
       if (apply) {
-        const response = await fetch('http://127.0.0.1:8000/car/' + this.selectedEvent.id, {
+        const response = await fetch('http://3.121.29.84/car/' + this.selectedEvent.id, {
           method: 'delete',
           headers: {
             "Content-Type": "application/json"
