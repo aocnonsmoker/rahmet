@@ -117,7 +117,7 @@ export default {
     },
     async getCar() {
       this.cars = [];
-      const response = await fetch('http://127.0.0.1:8000/car');
+      const response = await fetch('http://3.121.29.84/car');
       const result = await response.json();
       for (const r of result) {
         r.start = r.start.replace("T", " ").slice(0, -3);
@@ -127,7 +127,7 @@ export default {
     },
     async getEvents() {
         this.events = [];
-        const response = await fetch('http://127.0.0.1:8000/events');
+        const response = await fetch('http://3.121.29.84/events');
         const result = await response.json();
         for (const r of result) {
           r.start = r.start.replace("T", " ").slice(0, -3);
