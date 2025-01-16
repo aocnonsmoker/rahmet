@@ -152,12 +152,13 @@ export default {
       this.cars = this.cars.filter(a => a.start.split(' ')[0] == this.today).sort((a, b) => b.start.localeCompare(a.start));
     },
     async addItem() {
+      const d = moment(new Date()).format("YYYY-MM-DD HH:mm")
       const response = await fetch('http://3.121.29.84/record-car', {
         method: 'post',
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({title: '', price: 1500, start: `${this.today} ${this.curDate.split(' ')[1]}`})
+        body: JSON.stringify({title: '', price: 1500, start: `${this.today} ${d.split(' ')[1]}`})
       });
       const result = await response.json();
       alert(result)

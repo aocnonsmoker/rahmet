@@ -157,7 +157,8 @@
                 <ion-select-option :value="0.5">30</ion-select-option>
               </ion-select>
             </ion-item>
-            <template v-if="duration || (ownHour && ownMinut)">
+            <template v-if="duration || (ownHour)">
+              <div style="overflow-y: scroll; height:600px;">
               <ion-item
                 v-for="item in splitDays"
                 :key="`${item.id}-${duration}`"
@@ -179,6 +180,7 @@
                   </ion-row>
                 </ion-label>
               </ion-item>
+              </div>
             </template>
           </ion-content>
         </ion-modal>
@@ -356,13 +358,14 @@ export default {
     };
   },
   async mounted() {
-    // await this.$nextTick(() => {
-    //   window.setInterval(() => {
-    //     this.getEvents();
-    //   }, 10000)
-    // })
     await this.getEvents()
     this.$watch('today', this.getEvents)
+  },
+  updated() {
+    setTimeout(() => {
+      this.scrollToCurrentTime();
+    })
+
   },
   methods: {
     async getEvents() {
@@ -377,10 +380,10 @@ export default {
         }
         this.tableList = this.events.filter(a => a.start.split(' ')[0] == this.today).sort((a, b) => a.start.localeCompare(b.start));
     },
-    scrollToCurrentTime() {
-      const calendar = document.querySelector('#vuecal');
-      calendar.scrollTop = calendar.scrollHeight;
-      console.log('here')
+    scrollToCurrentTime () {
+      const calendar = document.querySelector('#vuecal .vuecal__bg')
+      const hours = this.now.getHours() + this.now.getMinutes() / 60
+      calendar.scrollTo({ top: hours * 155, behavior: 'smooth' })
     },
     cancel() {
       this.isOpen = false;
@@ -447,6 +450,8 @@ export default {
         const dates = this.events.filter((event) => (event.split == split) && (event.start.split(' ')[0] == this.selectedDate));
         const times = [];
         let i = this.now.getHours();
+        const curMinut = this.now.getMinutes();
+        let first = true;
         while (i < 24) {
             if (i <= this.min_hour || i >= this.max_hour) {
                 let minut = 0;
@@ -455,22 +460,27 @@ export default {
                     minut = 30;
                     minutHalf = 0;
                 }
-                const d = {
+                if (!first) {
+                  const d = {
                     start: moment(new Date(year, month, day, i, 0)).format("YYYY-MM-DD HH:mm"),
                     end: moment(new Date(year, month, day, i + Math.trunc(duration), minut)).format("YYYY-MM-DD HH:mm"),
-                };
-                const dHalf = {
+                  };
+                  const match = dates.find((item) => (item.start == d.start) || (item.end == d.end) || (item.start < d.end && item.start > d.start) || (item.end > d.start && item.end < d.end) || (item.start < d.start && item.end > d.end));
+                  if (!match) {
+                    times.push(d);
+                  }
+                }
+                if (curMinut >= 0 && curMinut <= 30) {
+                  const dHalf = {
                     start: moment(new Date(year, month, day, i, 30)).format("YYYY-MM-DD HH:mm"),
                     end: moment(new Date(year, month, day, i + Math.round(duration), minutHalf)).format("YYYY-MM-DD HH:mm"),
-                };
-                const match = dates.find((item) => (item.start == d.start) || (item.end == d.end) || (item.start < d.end && item.start > d.start) || (item.end > d.start && item.end < d.end) || (item.start < d.start && item.end > d.end));
-                const matchHalf = dates.find((item) => (item.start == dHalf.start) || (item.end == dHalf.end) || (item.start < dHalf.end && item.start > dHalf.start) || (item.end > dHalf.start && item.end < dHalf.end) || (item.start < dHalf.start && item.end > dHalf.end));
-                if (!match) {
-                  times.push(d);
+                  };
+                  const matchHalf = dates.find((item) => (item.start == dHalf.start) || (item.end == dHalf.end) || (item.start < dHalf.end && item.start > dHalf.start) || (item.end > dHalf.start && item.end < dHalf.end) || (item.start < dHalf.start && item.end > dHalf.end));
+                  if (!matchHalf) {
+                    times.push(dHalf); 
+                  }
                 }
-                if (!matchHalf) {
-                  times.push(dHalf); 
-                }
+                first = false;
                 i += 1;
             } else {
                 i += 1;
@@ -495,7 +505,11 @@ export default {
     selectDate(split, date) {
         const classes = ['blue-event', 'green-event', 'orange-event', 'red-event']
         const newItem = {...this.newEvent, split: split, start: date.start, end: date.end, class: classes[split - 1]}
-        this.newEvent = newItem;
+        if (newItem.start == this.newEvent.start) {
+          this.newEvent.start = ''
+        } else {
+          this.newEvent = newItem;
+        }
     },
     onEventClick(event) {
         this.selectedEvent = this.events.find(item => item.id == event.id);
