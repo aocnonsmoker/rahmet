@@ -391,6 +391,7 @@ export default {
       this.duration = null;
       this.ownHour = null;
       this.ownMinut = null;
+      this.selectedDate = this.today;
       this.newEvent = {
         title: '',
         adult: null,
