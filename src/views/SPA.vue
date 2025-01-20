@@ -449,18 +449,52 @@ export default {
         const day = Number(now[2]);
         const dates = this.events.filter((event) => (event.split == split) && (event.start.split(' ')[0] == this.selectedDate));
         const times = [];
-        let i = this.now.getHours();
-        const curMinut = this.now.getMinutes();
-        let first = true;
-        while (i < 24) {
-            if (i <= this.min_hour || i >= this.max_hour) {
-                let minut = 0;
-                let minutHalf = 30;
-                if (!Number.isInteger(duration)) {
-                    minut = 30;
-                    minutHalf = 0;
-                }
-                if (!first) {
+        if (this.selectedDate === this.today) {
+          let i = this.now.getHours();
+          const curMinut = this.now.getMinutes();
+          let first = true;
+          while (i < 24) {
+              if (i <= this.min_hour || i >= this.max_hour) {
+                  let minut = 0;
+                  let minutHalf = 30;
+                  if (!Number.isInteger(duration)) {
+                      minut = 30;
+                      minutHalf = 0;
+                  }
+                  if (!first) {
+                    const d = {
+                      start: moment(new Date(year, month, day, i, 0)).format("YYYY-MM-DD HH:mm"),
+                      end: moment(new Date(year, month, day, i + Math.trunc(duration), minut)).format("YYYY-MM-DD HH:mm"),
+                    };
+                    const match = dates.find((item) => (item.start == d.start) || (item.end == d.end) || (item.start < d.end && item.start > d.start) || (item.end > d.start && item.end < d.end) || (item.start < d.start && item.end > d.end));
+                    if (!match) {
+                      times.push(d);
+                    }
+                  }
+                  if (curMinut >= 0 && curMinut <= 30) {
+                    const dHalf = {
+                      start: moment(new Date(year, month, day, i, 30)).format("YYYY-MM-DD HH:mm"),
+                      end: moment(new Date(year, month, day, i + Math.round(duration), minutHalf)).format("YYYY-MM-DD HH:mm"),
+                    };
+                    const matchHalf = dates.find((item) => (item.start == dHalf.start) || (item.end == dHalf.end) || (item.start < dHalf.end && item.start > dHalf.start) || (item.end > dHalf.start && item.end < dHalf.end) || (item.start < dHalf.start && item.end > dHalf.end));
+                    if (!matchHalf) {
+                      times.push(dHalf); 
+                    }
+                  }
+                  first = false;
+              }
+              i += 1;
+          }
+        } else {
+          let i = 0
+          while (i < 24) {
+              if (i <= this.min_hour || i >= this.max_hour) {
+                  let minut = 0;
+                  let minutHalf = 30;
+                  if (!Number.isInteger(duration)) {
+                      minut = 30;
+                      minutHalf = 0;
+                  }
                   const d = {
                     start: moment(new Date(year, month, day, i, 0)).format("YYYY-MM-DD HH:mm"),
                     end: moment(new Date(year, month, day, i + Math.trunc(duration), minut)).format("YYYY-MM-DD HH:mm"),
@@ -469,8 +503,6 @@ export default {
                   if (!match) {
                     times.push(d);
                   }
-                }
-                if (curMinut >= 0 && curMinut <= 30) {
                   const dHalf = {
                     start: moment(new Date(year, month, day, i, 30)).format("YYYY-MM-DD HH:mm"),
                     end: moment(new Date(year, month, day, i + Math.round(duration), minutHalf)).format("YYYY-MM-DD HH:mm"),
@@ -479,12 +511,9 @@ export default {
                   if (!matchHalf) {
                     times.push(dHalf); 
                   }
-                }
-                first = false;
-                i += 1;
-            } else {
-                i += 1;
-            } 
+              } 
+              i += 1;
+          }
         }
 
         return times;

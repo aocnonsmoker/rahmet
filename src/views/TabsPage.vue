@@ -17,7 +17,7 @@
           <ion-icon aria-hidden="true" :icon="square" />
           <ion-label>Гостиница</ion-label>
         </ion-tab-button>
-        <ion-tab-button tab="tab3" href="/tabs/cash">
+        <ion-tab-button tab="tab4" href="/tabs/cash">
           <ion-icon aria-hidden="true" :icon="circle" />
           <ion-label>Касса</ion-label>
         </ion-tab-button>
