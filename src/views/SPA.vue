@@ -3,10 +3,11 @@
     <ion-header :translucent="true">
       <ion-toolbar>
         <ion-buttons slot="start">
-          <ion-button @click="() => { this.tab = 1 }" color="secondary">Календарь</ion-button>
+          <!-- <ion-button @click="() => { this.tab = 1 }" color="secondary">Календарь</ion-button> -->
+          <ion-button @click="() => { this.idx += 1 }" color="secondary">Сегодня</ion-button>
         </ion-buttons>
         <ion-buttons slot="end">
-          <ion-button @click="() => { this.tab = 2 }" color="secondary">Таблица  </ion-button>
+          <!-- <ion-button @click="() => { this.tab = 2 }" color="secondary">Таблица  </ion-button> -->
           <ion-button @click="getEvents" color="secondary">Обновить</ion-button>
         </ion-buttons>
       </ion-toolbar>
@@ -17,7 +18,7 @@
         <ion-button expand="block" @click="setOpen(true)"
           >Добавить запись</ion-button
         >
-        <div v-if="tab == 1">
+        <div :key="idx" v-if="tab == 1">
           <vue-cal
             id="vuecal"
             locale="ru"
@@ -250,11 +251,11 @@
               </ion-select>
             </ion-item>
             <ion-item>
-                <h1>С</h1>
+                <h3>С</h3>
                 <ion-datetime v-model="timeStartDate" presentation="date-time" :prefer-wheel="true" minuteValues="0,30"></ion-datetime>
             </ion-item>
             <ion-item>
-                <h1>До</h1>
+                <h3>До</h3>
                 <ion-datetime v-model="timeEndDate" presentation="date-time" :prefer-wheel="true" minuteValues="0,30"></ion-datetime>
             </ion-item>
             <ion-item>
@@ -338,8 +339,8 @@ export default {
         },
       },
       duration: null,
-      min_hour: 1,
-      max_hour: 9,
+      min_hour: 9,
+      max_hour: 27,
       newEvent: {
         title: '',
         adult: null,
@@ -354,11 +355,12 @@ export default {
       ownMinut: null,
       classes: ['blue-event', 'green-event', 'orange-event', 'red-event'],
       tab: 1,
-      tableList: []
+      tableList: [],
+      idx: 0
     };
   },
   async mounted() {
-    await this.getEvents()
+    await this.getEvents();
     this.$watch('today', this.getEvents)
   },
   updated() {
@@ -375,7 +377,7 @@ export default {
         for (const r of result) {
           r.start = r.start.replace("T", " ").slice(0, -3);
           r.end = r.end.replace("T", " ").slice(0, -3);
-          r.class = this.classes[r.split - 1]
+          r.class = this.classes[Number(r.split) - 1] || ''
           this.events.push(r)
         }
         this.tableList = this.events.filter(a => a.start.split(' ')[0] == this.today).sort((a, b) => a.start.localeCompare(b.start));
@@ -441,80 +443,64 @@ export default {
       this.isOpen = !this.isOpen;
     },
     availableTime(split, duration) {
-        if (this.ownHour && this.ownMinut) {
-            duration = Number(this.ownHour) + this.ownMinut;
-        }
-        const now = this.selectedDate.split('-');
-        const year = Number(now[0]);
-        const month = Number(now[1]) - 1;
-        const day = Number(now[2]);
-        const dates = this.events.filter((event) => (event.split == split) && (event.start.split(' ')[0] == this.selectedDate));
-        const times = [];
-        if (this.selectedDate === this.today) {
-          let i = this.now.getHours();
-          const curMinut = this.now.getMinutes();
-          let first = true;
-          while (i < 24) {
-              if (i <= this.min_hour || i >= this.max_hour) {
-                  let minut = 0;
-                  let minutHalf = 30;
-                  if (!Number.isInteger(duration)) {
-                      minut = 30;
-                      minutHalf = 0;
-                  }
-                  if (!first) {
-                    const d = {
-                      start: moment(new Date(year, month, day, i, 0)).format("YYYY-MM-DD HH:mm"),
-                      end: moment(new Date(year, month, day, i + Math.trunc(duration), minut)).format("YYYY-MM-DD HH:mm"),
-                    };
-                    const match = dates.find((item) => (item.start == d.start) || (item.end == d.end) || (item.start < d.end && item.start > d.start) || (item.end > d.start && item.end < d.end) || (item.start < d.start && item.end > d.end));
-                    if (!match) {
-                      times.push(d);
-                    }
-                  }
-                  if (curMinut >= 0 && curMinut <= 30) {
-                    const dHalf = {
-                      start: moment(new Date(year, month, day, i, 30)).format("YYYY-MM-DD HH:mm"),
-                      end: moment(new Date(year, month, day, i + Math.round(duration), minutHalf)).format("YYYY-MM-DD HH:mm"),
-                    };
-                    const matchHalf = dates.find((item) => (item.start == dHalf.start) || (item.end == dHalf.end) || (item.start < dHalf.end && item.start > dHalf.start) || (item.end > dHalf.start && item.end < dHalf.end) || (item.start < dHalf.start && item.end > dHalf.end));
-                    if (!matchHalf) {
-                      times.push(dHalf); 
-                    }
-                  }
-                  first = false;
-              }
-              i += 1;
-          }
+        // Переводим длительность в минуты
+        if (this.ownHour !== null && this.ownMinut !== null) {
+            duration = (Number(this.ownHour || 0) * 60) + Number(this.ownMinut || 0);
         } else {
-          let i = 0
-          while (i < 24) {
-              if (i <= this.min_hour || i >= this.max_hour) {
-                  let minut = 0;
-                  let minutHalf = 30;
-                  if (!Number.isInteger(duration)) {
-                      minut = 30;
-                      minutHalf = 0;
-                  }
-                  const d = {
-                    start: moment(new Date(year, month, day, i, 0)).format("YYYY-MM-DD HH:mm"),
-                    end: moment(new Date(year, month, day, i + Math.trunc(duration), minut)).format("YYYY-MM-DD HH:mm"),
-                  };
-                  const match = dates.find((item) => (item.start == d.start) || (item.end == d.end) || (item.start < d.end && item.start > d.start) || (item.end > d.start && item.end < d.end) || (item.start < d.start && item.end > d.end));
-                  if (!match) {
-                    times.push(d);
-                  }
-                  const dHalf = {
-                    start: moment(new Date(year, month, day, i, 30)).format("YYYY-MM-DD HH:mm"),
-                    end: moment(new Date(year, month, day, i + Math.round(duration), minutHalf)).format("YYYY-MM-DD HH:mm"),
-                  };
-                  const matchHalf = dates.find((item) => (item.start == dHalf.start) || (item.end == dHalf.end) || (item.start < dHalf.end && item.start > dHalf.start) || (item.end > dHalf.start && item.end < dHalf.end) || (item.start < dHalf.start && item.end > dHalf.end));
-                  if (!matchHalf) {
-                    times.push(dHalf); 
-                  }
-              } 
-              i += 1;
-          }
+            duration = Number(duration) * 60; // duration в часах
+        }
+
+        const [year, monthStr, day] = this.selectedDate.split('-');
+        const month = Number(monthStr) - 1;
+
+        const isToday = this.selectedDate === this.today;
+        const nowHour = this.now.getHours();
+        const nowMin = this.now.getMinutes();
+
+        // Список событий на этот день и split
+        const events = this.events
+            .filter(e => e.split == split && moment(e.start).format("YYYY-MM-DD") === this.selectedDate)
+            .map(e => ({
+                start: new Date(e.start),
+                end: new Date(e.end)
+            }));
+
+        // Проверка пересечения слот → событие
+        const overlaps = (s1, e1) => events.some(ev => s1 < ev.end && ev.start < e1);
+
+        // Формат даты
+        const fmt = d => moment(d).format("YYYY-MM-DD HH:mm");
+
+        const times = [];
+
+        // Идём по рабочим часам
+        for (let hour = this.min_hour; hour < this.max_hour; hour++) {
+
+            // Только варианты 00 и 30 минут
+            for (let minute of [0, 30]) {
+
+                // Пропускаем прошлое время
+                if (isToday) {
+                    const slotTime = hour * 60 + minute;
+                    const nowTime  = nowHour * 60 + nowMin;
+
+                    const diff = nowTime - slotTime;
+
+                    // если слот в прошлом и больше чем на 30 минут — пропускаем
+                    if (diff > 30) continue;
+                }
+
+                const start = new Date(year, month, day, hour, minute);
+                const end   = new Date(start.getTime() + duration * 60000);
+
+                // Проверка пересечения с событиями
+                if (!overlaps(start, end)) {
+                    times.push({
+                        start: fmt(start),
+                        end: fmt(end),
+                    });
+                }
+            }
         }
 
         return times;
@@ -588,6 +574,9 @@ export default {
 #container a {
   text-decoration: none;
 }
+.vuecal__menu {
+  display: none !important;
+}
 .vuecal__now-line {
   color: #06c;
 }
@@ -628,6 +617,10 @@ export default {
   background-color: rgba(247, 143, 158, 0.7);
   color: #000000;
   border: 2px solid black;
+}
+.vuecal__title-bar {
+  background-color: #fff !important;
+  font-size: 2em;
 }
 :root {
   --ion-color-new: #69bb7b;

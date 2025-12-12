@@ -3,7 +3,7 @@
     <ion-header :translucent="true">
       <ion-toolbar>
         <ion-buttons slot="start">
-          <ion-title>Касса</ion-title>
+          <ion-title>Автомойка</ion-title>
         </ion-buttons>
         <ion-buttons slot="end">
           <ion-button @click="getCar" color="secondary">Обновить</ion-button>
@@ -27,8 +27,8 @@
         <ion-button expand="block" @click="addItem"
           >Добавить запись</ion-button
         >
-        <div v-for="car in cars" :key="car.id">
-          <p style="margin: 10px 20px;" @click="onEventClick(car)">
+        <div v-for="car in cars" :key="car.id" style="">
+          <p style="margin: 20px 20px; font-size: 20px;" @click="onEventClick(car)">
             <ion-text>{{car.start.split(' ')[1]}} / {{car.title}} / Сумма: {{car.price}}</ion-text>
           </p>
         </div>

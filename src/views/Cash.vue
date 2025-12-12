@@ -99,43 +99,51 @@ export default {
     this.$watch('today', this.sumTotal)
   },
   methods: {
+    formatDate(dt) {
+        return dt.replace("T", " ").slice(0, -3);
+    },
+
+    getDayRange(dateStr) {
+        const start = new Date(`${dateStr}T06:00:00`);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 1);
+        return { start, end };
+    },
+
+    isInRange(startStr, range) {
+        const dt = new Date(startStr.replace(" ", "T"));
+        return dt >= range.start && dt < range.end;
+    },
+
     sumTotal() {
-        this.totalCar = 0;
-        this.totalSpa = 0;
-        const spa = this.events.filter(a => a.start.split(' ')[0] == this.today);
-        const car = this.cars.filter(a => a.start.split(' ')[0] == this.today);
-        for (const c of car) {
-            if (c.price) {
-                this.totalCar += c.price;
-            }
-        }
-        for (const s of spa) {
-            if (s.price) {
-                this.totalSpa += s.price;
-            }
-        }
+        const range = this.getDayRange(this.today);
+
+        this.totalCar = this.cars
+            .filter(c => c.price && this.isInRange(c.start, range))
+            .reduce((sum, c) => sum + c.price, 0);
+
+        this.totalSpa = this.events
+            .filter(e => e.price && this.isInRange(e.start, range))
+            .reduce((sum, e) => sum + e.price, 0);
     },
+
     async getCar() {
-      this.cars = [];
-      const response = await fetch('http://3.121.29.84/car');
-      const result = await response.json();
-      for (const r of result) {
-        r.start = r.start.replace("T", " ").slice(0, -3);
-        this.cars.push(r)
-      }
-      this.sumTotal();
-    },
-    async getEvents() {
-        this.events = [];
-        const response = await fetch('http://3.121.29.84/events');
-        const result = await response.json();
-        for (const r of result) {
-          r.start = r.start.replace("T", " ").slice(0, -3);
-          r.end = r.end.replace("T", " ").slice(0, -3);
-          this.events.push(r)
-        }
+        const res = await fetch('http://3.121.29.84/car');
+        const data = await res.json();
+        this.cars = data.map(r => ({ ...r, start: this.formatDate(r.start) }));
         this.sumTotal();
     },
+
+    async getEvents() {
+        const res = await fetch('http://3.121.29.84/events');
+        const data = await res.json();
+        this.events = data.map(r => ({
+            ...r,
+            start: this.formatDate(r.start),
+            end: this.formatDate(r.end)
+        }));
+        this.sumTotal();
+    }
   }
 }
 </script>
