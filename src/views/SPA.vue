@@ -618,6 +618,11 @@ export default {
   color: #000000;
   border: 2px solid black;
 }
+.vuecal__title-bar {
+  background-color: #fff !important;
+  font-size: 2em;
+  color: black !important;
+}
 :root {
   --ion-color-new: #69bb7b;
   --ion-color-new-rgb: 105, 187, 123;
