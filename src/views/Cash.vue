@@ -33,6 +33,18 @@
             <ion-label>Автомойка</ion-label>
             <ion-label>{{ totalCar }} тг.</ion-label>
         </ion-item>
+        <!-- <ion-item>
+            <ion-label>Гостиница</ion-label>
+            <ion-label>{{ totalCar }} тг.</ion-label>
+        </ion-item> -->
+        <ion-item>
+            <ion-label>PS</ion-label>
+            <ion-label>{{ totalPS }} тг.</ion-label>
+        </ion-item>
+        <!-- <ion-item>
+            <ion-label>Караоке</ion-label>
+            <ion-label>{{ totalCar }} тг.</ion-label>
+        </ion-item> -->
       </div>
     </ion-content>
   </ion-page>
@@ -81,6 +93,7 @@ export default {
     return {
       cars: [],
       events: [],
+      pss: [],
       formatOptions: {
         date: {
           weekday: "short",
@@ -90,7 +103,8 @@ export default {
       },
       today: moment(new Date()).format("YYYY-MM-DD"),
       totalSpa: 0,
-      totalCar: 0
+      totalCar: 0,
+      totalPS: 0
     }
   },
   async mounted() {
@@ -122,6 +136,10 @@ export default {
             .filter(c => c.price && this.isInRange(c.start, range))
             .reduce((sum, c) => sum + c.price, 0);
 
+        this.totalPS = this.pss
+            .filter(c => c.price && this.isInRange(c.start, range))
+            .reduce((sum, c) => sum + c.price, 0);
+
         this.totalSpa = this.events
             .filter(e => e.price && this.isInRange(e.start, range))
             .reduce((sum, e) => sum + e.price, 0);
@@ -131,6 +149,13 @@ export default {
         const res = await fetch('http://3.121.29.84/car');
         const data = await res.json();
         this.cars = data.map(r => ({ ...r, start: this.formatDate(r.start) }));
+        this.sumTotal();
+    },
+
+    async getPS() {
+        const res = await fetch('http://3.121.29.84/ps');
+        const data = await res.json();
+        this.pss = data.map(r => ({ ...r, start: this.formatDate(r.start) }));
         this.sumTotal();
     },
 

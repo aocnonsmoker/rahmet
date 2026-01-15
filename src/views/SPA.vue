@@ -1,11 +1,12 @@
 <template>
-  <ion-page>
-    <ion-header :translucent="true">
+  <ion-page [scrollY]="false">
+    <ion-header :translucent="true">  
       <ion-toolbar>
         <ion-buttons slot="start">
           <!-- <ion-button @click="() => { this.tab = 1 }" color="secondary">Календарь</ion-button> -->
-          <ion-button @click="() => { this.idx += 1 }" color="secondary">Сегодня</ion-button>
+          <ion-button @click="() => { this.idx += 1; this.selectedDate = this.today; }" color="secondary">Сегодня</ion-button>
         </ion-buttons>
+        {{selectedDate}}
         <ion-buttons slot="end">
           <!-- <ion-button @click="() => { this.tab = 2 }" color="secondary">Таблица  </ion-button> -->
           <ion-button @click="getEvents" color="secondary">Обновить</ion-button>
@@ -13,16 +14,15 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content>
-      <div>
+    <ion-content [scrollY]="false">
+      <div class="page-root">
         <ion-button expand="block" @click="setOpen(true)"
           >Добавить запись</ion-button
         >
-        <div :key="idx" v-if="tab == 1">
+        <div :key="idx" v-if="tab == 1" class="calendar-wrapper">
           <vue-cal
             id="vuecal"
             locale="ru"
-            style="height: 83vh"
             active-view="day"
             :disable-views="['years', 'year', 'week']"
             :time-step="30"
@@ -33,6 +33,7 @@
             :timeCellHeight="80"
             :on-event-click="onEventClick"
             :watchRealTime="true"
+            @view-change="onCellClick"
           >
             <template #split-label="{ split }">
               <strong :style="`color: ${split.color}`">{{ split.label }}</strong>
@@ -40,11 +41,19 @@
             <template #event="{ event }">
               <div v-html="event.title" />
               {{ showDate(event.start) }}-{{ showDate(event.end) }}
-              <div>Взр: {{ event.adult }}</div>
-              <div>Дети: {{ event.child }}</div>
-              <div>
-                Сумма: <br />
-                {{ event.price }}тг.
+              <div v-if="isLateNight(event)">
+                <div>
+                  Сумма: <br />
+                  {{ event.price }}тг.
+                </div>
+              </div>
+              <div v-else>
+                <div>Взр: {{ event.adult }}</div>
+                <div>Дети: {{ event.child }}</div>
+                <div>
+                  Сумма: <br />
+                  {{ event.price }}тг.
+                </div>
               </div>
             </template>
           </vue-cal>
@@ -393,7 +402,6 @@ export default {
       this.duration = null;
       this.ownHour = null;
       this.ownMinut = null;
-      this.selectedDate = this.today;
       this.newEvent = {
         title: '',
         adult: null,
@@ -549,6 +557,17 @@ export default {
         await this.getEvents();
         this.showEvent = false; 
       }
+    },
+    isLateNight(event) {
+      const end = new Date(event.end); // убедимся, что это Date
+      const hour = end.getHours();
+      const minute = end.getMinutes();
+      return hour === 0 && minute === 30;
+    },
+    onCellClick({ startDate, endDate, view }) {
+      if (view === 'day') {
+        this.selectedDate = moment(startDate).format('YYYY-MM-DD');
+      }
     }
   },
 };
@@ -643,5 +662,29 @@ export default {
 }
 .ion-color-selected {
   --ion-color-base: var(--ion-color-selected);
+}
+
+ion-content::part(scroll) {
+  overscroll-behavior: none;
+}
+
+ion-page {
+  overscroll-behavior: none;
+}
+
+.page-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-wrapper {
+  flex: 1;          /* занимает всё оставшееся место */
+  min-height: 0;    /* ОБЯЗАТЕЛЬНО для scroll */
+}
+
+#vuecal {
+  height: 100%;
+  overflow-y: auto;
 }
 </style>
