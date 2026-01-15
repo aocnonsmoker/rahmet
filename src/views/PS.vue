@@ -6,7 +6,7 @@
           <ion-title>PlayStation</ion-title>
         </ion-buttons>
         <ion-buttons slot="end">
-          <ion-button @click="getCar" color="secondary">Обновить</ion-button>
+          <ion-button @click="getPS" color="secondary">Обновить</ion-button>
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
@@ -50,6 +50,9 @@
                 placeholder="Имя клиента или телефон"
                 @ionChange="eventTitle = $event.target.value;"
               ></ion-input>
+            </ion-item>
+            <ion-item>
+                <ion-datetime v-model="selectedDate" presentation="date-time" :prefer-wheel="true"></ion-datetime>
             </ion-item>
           </ion-content>
         </ion-modal>
@@ -157,7 +160,6 @@ export default {
   },
   data() {
     return {
-      curDate: moment(new Date()).format("YYYY-MM-DD HH:mm"),
       pss: [],
       formatOptions: {
         date: {
@@ -172,6 +174,7 @@ export default {
       timeStartDate: null,
       isOpen: false,
       eventTitle: '',
+      selectedDate: moment(new Date()).format("YYYY-MM-DDTHH:mm"),
     }
   },
   async mounted() {
@@ -181,27 +184,29 @@ export default {
   methods: {
     async getPS() {
       this.pss = [];
-      const response = await fetch('http://3.121.29.84/ps');
+      const response = await fetch('http://3.72.68.148/ps');
       const result = await response.json();
       for (const r of result) {
         r.start = r.start.replace("T", " ").slice(0, -3);
         this.pss.push(r)
       }
       this.pss = this.pss.filter(a => a.start.split(' ')[0] == this.today).sort((a, b) => b.start.localeCompare(a.start));
+      this.selectedDate = `${this.today}T${this.selectedDate.split('T')[1]}`
     },
     async addItem() {
-      const d = moment(new Date()).format("YYYY-MM-DD HH:mm")
-      const response = await fetch('http://3.121.29.84/record-ps', {
-        method: 'post',
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({title: this.eventTitle, price: null, start: `${this.today} ${d.split(' ')[1]}`})
-      });
-      const result = await response.json();
-      alert(result)
-      this.eventTitle = '';
-      await this.getPS();
+
+        const response = await fetch('http://3.72.68.148/record-ps', {
+          method: 'post',
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({title: this.eventTitle, price: null, start: `${this.today} ${this.selectedDate.split('T')[1]}`})
+        });
+        const result = await response.json();
+        alert(result)
+        this.eventTitle = '';
+        this.isOpen = false;
+        await this.getPS();
     },
     onEventClick(event) {
         this.selectedEvent = this.pss.find(item => item.id == event.id);
@@ -218,7 +223,7 @@ export default {
     async confirmEdit() {
 
         this.selectedEvent.start = `${this.timeStartDate.split('T')[0]} ${this.timeStartDate.split('T')[1]}`
-        const response = await fetch('http://3.121.29.84/ps/' + this.selectedEvent.id, {
+        const response = await fetch('http://3.72.68.148/ps/' + this.selectedEvent.id, {
           method: 'put',
           headers: {
             "Content-Type": "application/json"
@@ -233,7 +238,7 @@ export default {
     async deleteEvent() {
       const apply = confirm('Вы точно хотите удалить запись?')
       if (apply) {
-        const response = await fetch('http://3.121.29.84/ps/' + this.selectedEvent.id, {
+        const response = await fetch('http://3.72.68.148/ps/' + this.selectedEvent.id, {
           method: 'delete',
           headers: {
             "Content-Type": "application/json"

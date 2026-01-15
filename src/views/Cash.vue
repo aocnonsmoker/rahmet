@@ -6,8 +6,8 @@
           <ion-title>Касса</ion-title>
         </ion-buttons>
         <ion-buttons slot="end">
-          <ion-title>Итого: {{ totalSpa + totalCar }} тг.</ion-title>
-          <ion-button @click="() => { this.getCar(); this.getEvents(); }" color="secondary">Обновить</ion-button>
+          <ion-title>Итого: {{ totalSpa + totalCar + totalPS }} тг.</ion-title>
+          <ion-button @click="() => { this.getCar(); this.getEvents(); this.getPS(); }" color="secondary">Обновить</ion-button>
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
@@ -109,6 +109,7 @@ export default {
   },
   async mounted() {
     await this.getCar();
+    await this.getPS();
     await this.getEvents();
     this.$watch('today', this.sumTotal)
   },
@@ -146,21 +147,21 @@ export default {
     },
 
     async getCar() {
-        const res = await fetch('http://3.121.29.84/car');
+        const res = await fetch('http://3.72.68.148/car');
         const data = await res.json();
         this.cars = data.map(r => ({ ...r, start: this.formatDate(r.start) }));
         this.sumTotal();
     },
 
     async getPS() {
-        const res = await fetch('http://3.121.29.84/ps');
+        const res = await fetch('http://3.72.68.148/ps');
         const data = await res.json();
         this.pss = data.map(r => ({ ...r, start: this.formatDate(r.start) }));
         this.sumTotal();
     },
 
     async getEvents() {
-        const res = await fetch('http://3.121.29.84/events');
+        const res = await fetch('http://3.72.68.148/events');
         const data = await res.json();
         this.events = data.map(r => ({
             ...r,
