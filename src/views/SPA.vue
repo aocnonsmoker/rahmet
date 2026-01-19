@@ -637,7 +637,7 @@ export default {
   border: 2px solid black;
 }
 .vuecal__title-bar {
-  background-color: #fff !important;
+  /* background-color: #fff !important; */
   font-size: 2em;
   color: black !important;
 }
