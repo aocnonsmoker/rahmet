@@ -15,9 +15,6 @@
 
     <ion-content :scroll-y="false">
       <div class="page-root">
-        <ion-button expand="block" @click="setOpen(true)"
-          >Добавить запись</ion-button
-        >
         <div :key="idx" v-if="tab == 1" class="calendar-wrapper">
           <vue-cal
             id="vuecal"
@@ -30,7 +27,6 @@
             sticky-split-labels
             @ready="scrollToCurrentTime"
             :timeCellHeight="80"
-            :on-event-click="onEventClick"
             :watchRealTime="true"
             @view-change="onCellClick"
           >
@@ -39,21 +35,7 @@
             </template>
             <template #event="{ event }">
               <div v-html="event.title" />
-              {{ showDate(event.start) }}-{{ showDate(event.end) }}
-              <div v-if="isLateNight(event)">
-                <div>
-                  Сумма: <br />
-                  {{ event.price }}тг.
-                </div>
-              </div>
-              <div v-else>
-                <div>Взр: {{ event.adult }}</div>
-                <div>Дети: {{ event.child }}</div>
-                <div>
-                  Сумма: <br />
-                  {{ event.price }}тг.
-                </div>
-              </div>
+              {{ showDate(event.start) }}-<br>{{ showDate(event.end) }}
             </template>
           </vue-cal>
         </div>
