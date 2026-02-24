@@ -190,8 +190,9 @@ export default {
         r.start = r.start.replace("T", " ").slice(0, -3);
         this.pss.push(r)
       }
-      this.pss = this.pss.filter(a => a.start.split(' ')[0] == this.today).sort((a, b) => b.start.localeCompare(a.start));
-      this.selectedDate = `${this.today}T${this.selectedDate.split('T')[1]}`
+      const todayDate = this.today.split('T')[0];
+      this.pss = this.pss.filter(a => a.start.split(' ')[0] == todayDate).sort((a, b) => b.start.localeCompare(a.start));
+      this.selectedDate = `${todayDate}T${this.selectedDate.split('T')[1]}`
     },
     async addItem() {
 

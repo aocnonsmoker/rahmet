@@ -1,5 +1,5 @@
 <template>
-  <ion-page [scrollY]="false">
+  <ion-page>
     <ion-header :translucent="true">  
       <ion-toolbar>
         <ion-buttons slot="start">
@@ -13,7 +13,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content [scrollY]="false">
+    <ion-content :scroll-y="false">
       <div class="page-root">
         <ion-button expand="block" @click="setOpen(true)"
           >Добавить запись</ion-button
