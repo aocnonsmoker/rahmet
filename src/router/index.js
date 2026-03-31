@@ -29,6 +29,10 @@ const routes = [
       {
         path: 'ps',
         component: () => import('@/views/PS.vue')
+      },
+      {
+        path: 'hotel',
+        component: () => import('@/views/Hotel.vue')
       }
     ]
   }

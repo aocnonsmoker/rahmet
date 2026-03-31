@@ -13,7 +13,7 @@
           <ion-label>Автомойка</ion-label>
         </ion-tab-button>
 
-        <ion-tab-button disabled tab="tab3" href="/tabs/tab3">
+        <ion-tab-button tab="tab3" href="/tabs/hotel">
           <ion-icon aria-hidden="true" :icon="square" />
           <ion-label>Гостиница</ion-label>
         </ion-tab-button>
