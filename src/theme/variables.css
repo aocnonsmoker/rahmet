@@ -1,2 +1,13 @@
 /* For information on how to create your own theme, please see:
 http://ionicframework.com/docs/theming/ */
+
+/* Force fixed font size, ignoring Android system font scale */
+:root {
+  --ion-font-size: 16px;
+}
+
+html {
+  font-size: 16px !important;
+  -webkit-text-size-adjust: 100% !important;
+  text-size-adjust: 100% !important;
+}
