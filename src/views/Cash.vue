@@ -147,21 +147,21 @@ export default {
     },
 
     async getCar() {
-        const res = await fetch('http://3.72.68.148/car');
+        const res = await fetch('http://79.76.52.210:8000/car');
         const data = await res.json();
         this.cars = data.map(r => ({ ...r, start: this.formatDate(r.start) }));
         this.sumTotal();
     },
 
     async getPS() {
-        const res = await fetch('http://3.72.68.148/ps');
+        const res = await fetch('http://79.76.52.210:8000/ps');
         const data = await res.json();
         this.pss = data.map(r => ({ ...r, start: this.formatDate(r.start) }));
         this.sumTotal();
     },
 
     async getEvents() {
-        const res = await fetch('http://3.72.68.148/events');
+        const res = await fetch('http://79.76.52.210:8000/events');
         const data = await res.json();
         this.events = data.map(r => ({
             ...r,
