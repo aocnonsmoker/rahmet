@@ -236,11 +236,16 @@ export default {
       idx: 0,
       events: [],
       splitDays: [
-        { id: 1, color: "blue",   label: "Номер 1", class: "split1" },
-        { id: 2, color: "green",  label: "Номер 2", class: "split2" },
-        { id: 3, color: "orange", label: "Номер 3", class: "split3" },
-        { id: 4, color: "red",    label: "Номер 4", class: "split4" },
-        { id: 5, color: "purple", label: "Номер 5", class: "split5" },
+        { id: 1,  color: "blue",    label: "Номер 1",  class: "split1"  },
+        { id: 2,  color: "green",   label: "Номер 2",  class: "split2"  },
+        { id: 3,  color: "orange",  label: "Номер 3",  class: "split3"  },
+        { id: 4,  color: "red",     label: "Номер 4",  class: "split4"  },
+        { id: 5,  color: "purple",  label: "Номер 5",  class: "split5"  },
+        { id: 6,  color: "teal",    label: "Номер 6",  class: "split6"  },
+        { id: 7,  color: "brown",   label: "Номер 7",  class: "split7"  },
+        { id: 8,  color: "navy",    label: "Номер 8",  class: "split8"  },
+        { id: 9,  color: "olive",   label: "Номер 9",  class: "split9"  },
+        { id: 10, color: "crimson", label: "Номер 10", class: "split10" },
       ],
       isOpen: false,
       showEvent: false,
@@ -256,7 +261,7 @@ export default {
         start: '',
         end: '',
       },
-      classes: ['blue-event', 'green-event', 'orange-event', 'red-event', 'purple-event'],
+      classes: ['blue-event', 'green-event', 'orange-event', 'red-event', 'purple-event', 'teal-event', 'brown-event', 'navy-event', 'olive-event', 'crimson-event'],
     };
   },
   async mounted() {
@@ -459,11 +464,16 @@ export default {
   text-align: center;
 }
 
-.room-row.split1 .room-label { background-color: rgba(226, 242, 253, 0.7); }
-.room-row.split2 .room-label { background-color: rgba(232, 245, 233, 0.7); }
-.room-row.split3 .room-label { background-color: rgba(255, 243, 224, 0.7); }
-.room-row.split4 .room-label { background-color: rgba(255, 235, 238, 0.7); }
-.room-row.split5 .room-label { background-color: rgba(237, 231, 246, 0.7); }
+.room-row.split1  .room-label { background-color: rgba(226, 242, 253, 0.7); }
+.room-row.split2  .room-label { background-color: rgba(232, 245, 233, 0.7); }
+.room-row.split3  .room-label { background-color: rgba(255, 243, 224, 0.7); }
+.room-row.split4  .room-label { background-color: rgba(255, 235, 238, 0.7); }
+.room-row.split5  .room-label { background-color: rgba(237, 231, 246, 0.7); }
+.room-row.split6  .room-label { background-color: rgba(224, 247, 250, 0.7); }
+.room-row.split7  .room-label { background-color: rgba(239, 229, 220, 0.7); }
+.room-row.split8  .room-label { background-color: rgba(221, 228, 243, 0.7); }
+.room-row.split9  .room-label { background-color: rgba(240, 244, 220, 0.7); }
+.room-row.split10 .room-label { background-color: rgba(252, 228, 228, 0.7); }
 
 .room-events {
   flex: 1;
@@ -474,11 +484,16 @@ export default {
   justify-content: center;
 }
 
-.room-row.split1 { background-color: rgba(226, 242, 253, 0.4); }
-.room-row.split2 { background-color: rgba(232, 245, 233, 0.4); }
-.room-row.split3 { background-color: rgba(255, 243, 224, 0.4); }
-.room-row.split4 { background-color: rgba(255, 235, 238, 0.4); }
-.room-row.split5 { background-color: rgba(237, 231, 246, 0.4); }
+.room-row.split1  { background-color: rgba(226, 242, 253, 0.4); }
+.room-row.split2  { background-color: rgba(232, 245, 233, 0.4); }
+.room-row.split3  { background-color: rgba(255, 243, 224, 0.4); }
+.room-row.split4  { background-color: rgba(255, 235, 238, 0.4); }
+.room-row.split5  { background-color: rgba(237, 231, 246, 0.4); }
+.room-row.split6  { background-color: rgba(224, 247, 250, 0.4); }
+.room-row.split7  { background-color: rgba(239, 229, 220, 0.4); }
+.room-row.split8  { background-color: rgba(221, 228, 243, 0.4); }
+.room-row.split9  { background-color: rgba(240, 244, 220, 0.4); }
+.room-row.split10 { background-color: rgba(252, 228, 228, 0.4); }
 
 .empty-room {
   height: 40px;
@@ -496,9 +511,14 @@ export default {
 .event-dates { font-size: 0.75rem; opacity: 0.8; }
 .event-price { font-size: 0.75rem; }
 
-.blue-event   { background-color: rgba(112, 192, 245, 0.7); }
-.green-event  { background-color: rgba(137, 243, 146, 0.7); }
-.orange-event { background-color: rgba(245, 207, 146, 0.7); }
-.red-event    { background-color: rgba(247, 143, 158, 0.7); }
-.purple-event { background-color: rgba(186, 104, 200, 0.7); }
+.blue-event    { background-color: rgba(112, 192, 245, 0.7); }
+.green-event   { background-color: rgba(137, 243, 146, 0.7); }
+.orange-event  { background-color: rgba(245, 207, 146, 0.7); }
+.red-event     { background-color: rgba(247, 143, 158, 0.7); }
+.purple-event  { background-color: rgba(186, 104, 200, 0.7); }
+.teal-event    { background-color: rgba(100, 220, 220, 0.7); }
+.brown-event   { background-color: rgba(188, 143, 100, 0.7); }
+.navy-event    { background-color: rgba(100, 130, 200, 0.7); }
+.olive-event   { background-color: rgba(180, 200, 100, 0.7); }
+.crimson-event { background-color: rgba(220, 80,  100, 0.7); }
 </style>

@@ -42,10 +42,10 @@
           <ion-label>Автомойка</ion-label>
           <ion-label>{{ totalCar }} тг.</ion-label>
         </ion-item>
-        <ion-item>
+        <!-- <ion-item>
           <ion-label>PS</ion-label>
           <ion-label>{{ totalPS }} тг.</ion-label>
-        </ion-item>
+        </ion-item> -->
         <ion-item>
           <ion-label>Гостиница</ion-label>
           <ion-label>{{ totalHotel }} тг.</ion-label>
@@ -83,10 +83,10 @@
           <ion-label>Автомойка</ion-label>
           <ion-label>{{ analyticTotals.car }} тг.</ion-label>
         </ion-item>
-        <ion-item>
+        <!-- <ion-item>
           <ion-label>PS</ion-label>
           <ion-label>{{ analyticTotals.ps }} тг.</ion-label>
-        </ion-item>
+        </ion-item> -->
         <ion-item>
           <ion-label>Гостиница</ion-label>
           <ion-label>{{ analyticTotals.hotel }} тг.</ion-label>
@@ -165,7 +165,7 @@ export default {
         this.fetchData('http://79.76.52.210:8000/ps', 'pss',
           r => ({ ...r, start: this.formatDate(r.start) })),
         this.fetchData('http://79.76.52.210:8000/hotel', 'hotelEvents',
-          r => ({ ...r, start: this.formatDate(r.start) })),
+          r => ({ ...r, start: this.formatDate(r.start), end: this.formatDate(r.end) })),
         this.fetchData('http://79.76.52.210:8000/events', 'events',
           r => ({ ...r, start: this.formatDate(r.start), end: this.formatDate(r.end) })),
       ]);
@@ -189,12 +189,28 @@ export default {
       return dt >= range.start && dt < range.end;
     },
 
+    hotelRevenueForDay(day) {
+      return this.hotelEvents
+        .filter(e => {
+          if (!e.price) return false;
+          const s = e.start.split(' ')[0];
+          const en = e.end ? e.end.split(' ')[0] : s;
+          return day >= s && day < en;
+        })
+        .reduce((sum, e) => {
+          const s = e.start.split(' ')[0];
+          const en = e.end ? e.end.split(' ')[0] : s;
+          const days = moment(en).diff(moment(s), 'days') || 1;
+          return sum + Math.round(e.price / days);
+        }, 0);
+    },
+
     sumTotal() {
       const range = this.getDayRange(this.today);
       this.totalCar   = this.cars.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0);
       this.totalPS    = this.pss.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0);
       this.totalSpa   = this.events.filter(e => e.price && this.isInRange(e.start, range)).reduce((s, e) => s + e.price, 0);
-      this.totalHotel = this.hotelEvents.filter(e => e.price && e.start.split(' ')[0] === this.today).reduce((s, e) => s + e.price, 0);
+      this.totalHotel = this.hotelRevenueForDay(this.today);
     },
 
     buildAnalytic() {
@@ -213,7 +229,7 @@ export default {
         daySpa.push(this.events.filter(e => e.price && this.isInRange(e.start, range)).reduce((s, e) => s + e.price, 0));
         dayCar.push(this.cars.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0));
         dayPS.push(this.pss.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0));
-        dayHotel.push(this.hotelEvents.filter(e => e.price && e.start.split(' ')[0] === day).reduce((s, e) => s + e.price, 0));
+        dayHotel.push(this.hotelRevenueForDay(day));
       }
 
       this.analyticTotals = {
@@ -270,7 +286,6 @@ export default {
             datasets: [
               { label: 'Баня',      data: daySpa,   backgroundColor: 'rgba(112,192,245,0.8)' },
               { label: 'Автомойка', data: dayCar,   backgroundColor: 'rgba(137,243,146,0.8)' },
-              { label: 'PS',        data: dayPS,    backgroundColor: 'rgba(245,207,146,0.8)' },
               { label: 'Гостиница', data: dayHotel, backgroundColor: 'rgba(186,104,200,0.8)' },
             ],
           },

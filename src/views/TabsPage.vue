@@ -17,10 +17,10 @@
           <ion-icon aria-hidden="true" :icon="square" />
           <ion-label>Гостиница</ion-label>
         </ion-tab-button>
-        <ion-tab-button tab="tab4" href="/tabs/ps">
+        <!-- <ion-tab-button tab="tab4" href="/tabs/ps">
           <ion-icon aria-hidden="true" :icon="game" />
           <ion-label>PS</ion-label>
-        </ion-tab-button>
+        </ion-tab-button> -->
         <ion-tab-button tab="tab5" href="/tabs/cash">
           <ion-icon aria-hidden="true" :icon="circle" />
           <ion-label>Касса</ion-label>
