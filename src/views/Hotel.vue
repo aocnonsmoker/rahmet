@@ -16,20 +16,18 @@
         <ion-button expand="block" @click="setOpen(true)">Добавить запись</ion-button>
 
         <!-- Vue-cal date navigator -->
-        <div :class="['date-nav-wrap', calView === 'day' ? 'date-nav-wrap--collapsed' : '']">
+        <div :class="['hotel-cal-wrap', calView === 'month' ? 'hotel-cal-wrap--month' : '']">
           <vue-cal
-            ref="dateCal"
             :key="idx"
-            class="date-nav-cal"
+            ref="dateCal"
             locale="ru"
             active-view="day"
             :disable-views="['years', 'year', 'week']"
             :time="false"
             :events="[]"
+            @ready="onCalReady"
             @view-change="onViewChange"
-            @cell-click="onCellClick"
           />
-          <div v-if="calView === 'month'" class="title-overlay" @click="backToDay"></div>
         </div>
 
         <!-- Rooms list -->
@@ -234,6 +232,7 @@ export default {
       selectedDate: moment().format("YYYY-MM-DD"),
       today: moment().format("YYYY-MM-DD"),
       idx: 0,
+      calView: 'day',
       events: [],
       splitDays: [
         { id: 1,  color: "blue",    label: "Номер 1",  class: "split1"  },
@@ -249,7 +248,6 @@ export default {
       ],
       isOpen: false,
       showEvent: false,
-      calView: 'day',
       selectedEvent: null,
       newEvent: {
         title: '',
@@ -268,21 +266,15 @@ export default {
     await this.getEvents();
   },
   methods: {
+    onCalReady() {
+      this.$nextTick(() => {
+        this.$refs.dateCal.switchView('day', new Date(this.selectedDate));
+      });
+    },
     onViewChange({ startDate, view }) {
       this.calView = view;
       if (view === 'day') {
         this.selectedDate = moment(startDate).format('YYYY-MM-DD');
-      }
-    },
-    onCellClick(date) {
-      if (this.calView === 'month') {
-        this.$refs.dateCal.switchView('day', date);
-      }
-    },
-    onNavWrapClick(e) {
-      if (this.calView === 'month' && e.target.closest('.vuecal__title button')) {
-        e.stopPropagation();
-        this.$refs.dateCal.switchView('day', new Date(this.selectedDate));
       }
     },
     getEventsForRoom(roomId) {
@@ -405,31 +397,30 @@ export default {
 </script>
 
 <style>
-.date-nav-cal .vuecal__menu {
+/* всегда скрыто */
+.hotel-cal-wrap .vuecal__menu {
   display: none !important;
 }
-/* Day view: collapse to title bar only */
-.date-nav-wrap--collapsed .vuecal__body,
-.date-nav-wrap--collapsed .vuecal__split-days-headers {
+/* скрываем тело только в day view */
+.hotel-cal-wrap:not(.hotel-cal-wrap--month) .vuecal__body,
+.hotel-cal-wrap:not(.hotel-cal-wrap--month) .vuecal__weekdays-headings,
+.hotel-cal-wrap:not(.hotel-cal-wrap--month) .vuecal__split-days-headers {
   display: none !important;
 }
-.date-nav-wrap--collapsed .date-nav-cal {
-  height: auto !important;
-  min-height: 0 !important;
-}
-.date-nav-wrap--collapsed {
-  height: 40px;
+.hotel-cal-wrap {
+  height: auto;
   overflow: hidden;
 }
-/* Month view: show full calendar */
-.date-nav-wrap:not(.date-nav-wrap--collapsed) .date-nav-cal {
+.hotel-cal-wrap--month {
   height: 380px;
 }
-.date-nav-cal {
+.hotel-cal-wrap .vuecal {
   box-shadow: none;
+  height: 100%;
+  min-height: 0;
 }
-.date-nav-cal .vuecal__title-bar {
-  font-size: 1.1em;
+.hotel-cal-wrap .vuecal__title-bar {
+  font-size: 1.3em;
   color: black !important;
 }
 </style>
