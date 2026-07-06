@@ -412,7 +412,8 @@ export default {
   overflow: hidden;
 }
 .hotel-cal-wrap--month {
-  height: 380px;
+  height: calc(100vh - 200px);
+  min-height: 380px;
 }
 .hotel-cal-wrap .vuecal {
   box-shadow: none;
@@ -420,7 +421,7 @@ export default {
   min-height: 0;
 }
 .hotel-cal-wrap .vuecal__title-bar {
-  font-size: 1.3em;
+  font-size: 2em;
   color: black !important;
 }
 </style>

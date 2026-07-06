@@ -592,51 +592,51 @@ export default {
 #container a {
   text-decoration: none;
 }
-.vuecal__menu {
+.calendar-wrapper .vuecal__menu {
   display: none !important;
 }
-.vuecal__now-line {
+.calendar-wrapper .vuecal__now-line {
   color: #06c;
 }
-.vuecal .day-split-header {
+.calendar-wrapper .vuecal .day-split-header {
   font-size: 11px;
 }
-.vuecal__body .split1 {
+.calendar-wrapper .vuecal__body .split1 {
   background-color: rgba(226, 242, 253, 0.7);
 }
-.vuecal__body .split2 {
+.calendar-wrapper .vuecal__body .split2 {
   background-color: rgba(232, 245, 233, 0.7);
 }
-.vuecal__body .split3 {
+.calendar-wrapper .vuecal__body .split3 {
   background-color: rgba(255, 243, 224, 0.7);
 }
-.vuecal__body .split4 {
+.calendar-wrapper .vuecal__body .split4 {
   background-color: rgba(255, 235, 238, 0.7);
 }
-.vuecal__no-event {
+.calendar-wrapper .vuecal__no-event {
   display: none;
 }
-.vuecal__event.blue-event {
+.calendar-wrapper .vuecal__event.blue-event {
   background-color: rgba(112, 192, 245, 0.7);
   color: #000000;
   border: 2px solid black;
 }
-.vuecal__event.green-event {
+.calendar-wrapper .vuecal__event.green-event {
   background-color: rgba(137, 243, 146, 0.7);
   color: #000000;
   border: 2px solid black;
 }
-.vuecal__event.orange-event {
+.calendar-wrapper .vuecal__event.orange-event {
   background-color: rgba(245, 207, 146, 0.7);
   color: #000000;
   border: 2px solid black;
 }
-.vuecal__event.red-event {
+.calendar-wrapper .vuecal__event.red-event {
   background-color: rgba(247, 143, 158, 0.7);
   color: #000000;
   border: 2px solid black;
 }
-.vuecal__title-bar {
+.calendar-wrapper .vuecal__title-bar {
   /* background-color: #fff !important; */
   font-size: 2em;
   color: black !important;
@@ -670,7 +670,9 @@ ion-content::part(scroll) {
 ion-page {
   overscroll-behavior: none;
 }
+</style>
 
+<style scoped>
 .page-root {
   height: 100%;
   display: flex;
