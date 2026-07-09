@@ -4,10 +4,26 @@ http://ionicframework.com/docs/theming/ */
 /* Force fixed font size, ignoring Android system font scale */
 :root {
   --ion-font-size: 16px;
+  --ion-font-family: "Nunito", sans-serif;
 }
 
 html {
   font-size: 16px !important;
   -webkit-text-size-adjust: 100% !important;
   text-size-adjust: 100% !important;
+}
+
+body {
+  font-family: "Nunito", sans-serif;
+}
+
+/* Plain <button> elements used in custom UI (date arrows, chips, steppers, etc.)
+   don't get Ionic's built-in touch handling like ion-button does. Without
+   touch-action: manipulation, mobile browsers wait ~300ms to rule out a
+   double-tap-to-zoom gesture before firing click, so a fast second tap can
+   land while the first tap's delayed "ghost click" is still pending -
+   causing a single quick tap sequence to register as two clicks. */
+button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }

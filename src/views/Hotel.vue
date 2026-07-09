@@ -1,178 +1,167 @@
 <template>
   <ion-page>
-    <ion-header :translucent="true">
-      <ion-toolbar>
-        <ion-buttons slot="start">
-          <ion-button @click="() => { idx++; selectedDate = today; }" color="secondary">Сегодня</ion-button>
-        </ion-buttons>
-        <ion-buttons slot="end">
-          <ion-button @click="getEvents" color="secondary">Обновить</ion-button>
-        </ion-buttons>
+    <ion-header :translucent="true" class="hotel-header">
+      <ion-toolbar class="hotel-toolbar">
+        <div class="header-card">
+          <button class="header-btn today" type="button" @click="goToday">Сегодня</button>
+          <div class="header-title">Гостиница</div>
+          <button class="header-btn refresh" type="button" @click="getEvents">
+            <ion-icon :icon="refreshIcon"></ion-icon>
+            Обновить
+          </button>
+        </div>
       </ion-toolbar>
     </ion-header>
 
     <ion-content :scroll-y="true">
       <div class="page-root">
-        <ion-button expand="block" @click="setOpen(true)">Добавить запись</ion-button>
+        <ion-button expand="block" class="add-btn" @click="setOpen(true)">+ Добавить запись</ion-button>
 
-        <!-- Vue-cal date navigator -->
-        <div :class="['hotel-cal-wrap', calView === 'month' ? 'hotel-cal-wrap--month' : '']">
-          <vue-cal
-            :key="idx"
-            ref="dateCal"
-            locale="ru"
-            active-view="day"
-            :disable-views="['years', 'year', 'week']"
-            :time="false"
-            :events="[]"
-            @ready="onCalReady"
-            @view-change="onViewChange"
-          />
+        <div class="date-nav">
+          <button class="nav-arrow" type="button" @click="prevDay">‹</button>
+          <button id="hotel-date-trigger" class="date-pill" type="button">{{ formattedDate }}</button>
+          <button class="nav-arrow" type="button" @click="nextDay">›</button>
         </div>
+        <ion-modal :keep-contents-mounted="true" trigger="hotel-date-trigger" ref="dateModal">
+          <MonthCalendar
+            :model-value="selectedDate"
+            :events="events"
+            @update:modelValue="onPickDate"
+          />
+        </ion-modal>
 
         <!-- Rooms list -->
-        <div class="rooms-grid">
-          <div v-for="room in splitDays" :key="room.id" class="room-row" :class="room.class">
-            <div class="room-label" :style="`color: ${room.color}`">
-              <strong>{{ room.label }}</strong>
-            </div>
-            <div class="room-events">
+        <div class="rooms-list">
+          <div
+            v-for="room in splitDays"
+            :key="room.id"
+            class="room-pill"
+            :style="{ background: hexToRgba(room.color, 0.12) }"
+          >
+            <div class="room-title" :style="{ color: room.color }">{{ room.label }}</div>
+            <div v-if="getEventsForRoom(room.id).length" class="room-events">
               <div
                 v-for="event in getEventsForRoom(room.id)"
                 :key="event.id"
-                class="event-card"
-                :class="event.class"
+                class="room-event"
+                :style="{ background: hexToRgba(room.color, 0.22), borderColor: hexToRgba(room.color, 0.55) }"
                 @click="onEventClick(event)"
               >
                 <div class="event-title" v-html="event.title"></div>
                 <div class="event-dates">{{ showDate(event.start) }} – {{ showDate(event.end) }}</div>
-                <div class="event-price">{{ event.price }} тг.</div>
+                <div v-if="event.price" class="event-price">{{ event.price }} тг.</div>
               </div>
-              <div v-if="getEventsForRoom(room.id).length === 0" class="empty-room"></div>
             </div>
           </div>
         </div>
 
         <!-- Модальное окно добавления -->
-        <ion-modal :is-open="isOpen">
-          <ion-header>
-            <ion-toolbar>
+        <ion-modal class="hotel-modal" :is-open="isOpen">
+          <ion-header class="hotel-modal-header ion-no-border">
+            <ion-toolbar class="hotel-modal-toolbar">
               <ion-buttons slot="start">
-                <ion-button @click="cancel()">Отменить</ion-button>
+                <ion-button fill="clear" color="medium" @click="cancel()">Отменить</ion-button>
               </ion-buttons>
               <ion-buttons slot="end">
-                <ion-button :strong="true" @click="confirm()">Записать</ion-button>
+                <ion-button fill="clear" color="primary" :strong="true" @click="confirm()">Записать</ion-button>
               </ion-buttons>
             </ion-toolbar>
           </ion-header>
           <ion-content class="ion-padding">
-            <ion-item>
-              <ion-input
-                label="Название записи"
-                label-placement="stacked"
-                ref="input"
-                type="text"
-                placeholder="Имя клиента или телефон"
-                @ionChange="newEvent.title = $event.target.value;"
-              ></ion-input>
-            </ion-item>
-            <ion-item>
-              <ion-input
-                label="Сумма"
-                label-placement="stacked"
-                type="number"
-                placeholder="тг"
-                @ionInput="newEvent.price = $event.target.value;"
-              ></ion-input>
-            </ion-item>
-            <ion-item>
-              <ion-select
-                @ionChange="newEvent.split = $event.target.value;"
-                label="Номер"
-                label-placement="stacked"
-              >
-                <ion-select-option v-for="room in splitDays" :key="room.id" :value="room.id">
-                  {{ room.label }}
-                </ion-select-option>
-              </ion-select>
-            </ion-item>
-            <ion-item>
-              <h3>Заезд</h3>
-              <ion-datetime
-                v-model="newEvent.start"
-                presentation="date"
-                :first-day-of-week="1"
-                :prefer-wheel="true"
-                @ionChange="onStartChange"
-              ></ion-datetime>
-            </ion-item>
-            <ion-item>
-              <h3>Выезд</h3>
-              <ion-datetime
-                v-model="newEvent.end"
-                presentation="date"
-                :first-day-of-week="1"
-                :prefer-wheel="true"
-              ></ion-datetime>
-            </ion-item>
+            <FormInput
+              label="Название записи"
+              type="text"
+              placeholder="Имя клиента или телефон"
+              :model-value="newEvent.title"
+              @update:modelValue="newEvent.title = $event"
+            />
+            <FormInput
+              label="Сумма"
+              type="number"
+              suffix="тг."
+              :model-value="newEvent.price"
+              @update:modelValue="newEvent.price = $event"
+            />
+            <FormSelect
+              label="Номер"
+              placeholder="Выберите номер"
+              :model-value="newEvent.split"
+              :options="roomOptions"
+              @update:modelValue="newEvent.split = $event"
+            />
+
+            <div class="date-field">
+              <label class="date-field-label">Заезд</label>
+              <button id="hotel-add-start-trigger" class="date-field-btn" type="button">{{ formatShort(newEvent.start) }}</button>
+            </div>
+            <ion-modal :keep-contents-mounted="true" trigger="hotel-add-start-trigger" ref="addStartModal">
+              <MonthCalendar :model-value="newEvent.start || today" :events="events" @update:modelValue="onPickStart" />
+            </ion-modal>
+
+            <div class="date-field">
+              <label class="date-field-label">Выезд</label>
+              <button id="hotel-add-end-trigger" class="date-field-btn" type="button">{{ formatShort(newEvent.end) }}</button>
+            </div>
+            <ion-modal :keep-contents-mounted="true" trigger="hotel-add-end-trigger" ref="addEndModal">
+              <MonthCalendar :model-value="newEvent.end || today" :events="events" @update:modelValue="onPickEnd" />
+            </ion-modal>
           </ion-content>
         </ion-modal>
 
         <!-- Модальное окно события -->
-        <ion-modal :is-open="showEvent">
-          <ion-header>
-            <ion-toolbar>
+        <ion-modal class="hotel-modal" :is-open="showEvent">
+          <ion-header class="hotel-modal-header ion-no-border">
+            <ion-toolbar class="hotel-modal-toolbar">
               <ion-buttons slot="start">
-                <ion-button @click="cancel()">Отменить</ion-button>
+                <ion-button fill="clear" color="medium" @click="cancel()">Отменить</ion-button>
               </ion-buttons>
               <ion-buttons slot="end">
-                <ion-button :strong="true" @click="confirmEdit()">Записать</ion-button>
+                <ion-button fill="clear" color="primary" :strong="true" @click="confirmEdit()">Записать</ion-button>
               </ion-buttons>
             </ion-toolbar>
           </ion-header>
           <ion-content class="ion-padding">
-            <ion-item>
-              <ion-input
-                v-model="selectedEvent.title"
-                label="Название записи"
-                label-placement="stacked"
-                type="text"
-                placeholder="Имя клиента или телефон"
-              ></ion-input>
-            </ion-item>
-            <ion-item>
-              <ion-input
-                label="Сумма"
-                label-placement="stacked"
-                type="number"
-                placeholder="тг"
-                :value="selectedEvent.price"
-                @ionInput="selectedEvent.price = $event.target.value;"
-              ></ion-input>
-            </ion-item>
-            <ion-item>
-              <ion-select
-                v-model="selectedEvent.split"
-                @ionChange="selectedEvent.split = $event.target.value;"
-                label="Номер"
-                label-placement="stacked"
-              >
-                <ion-select-option v-for="room in splitDays" :key="room.id" :value="room.id">
-                  {{ room.label }}
-                </ion-select-option>
-              </ion-select>
-            </ion-item>
-            <ion-item>
-              <h3>Заезд</h3>
-              <ion-datetime v-model="timeStartDate" presentation="date" :prefer-wheel="true"></ion-datetime>
-            </ion-item>
-            <ion-item>
-              <h3>Выезд</h3>
-              <ion-datetime v-model="timeEndDate" presentation="date" :prefer-wheel="true"></ion-datetime>
-            </ion-item>
-            <ion-item>
-              <ion-button @click="deleteEvent" color="danger">Удалить</ion-button>
-            </ion-item>
+            <FormInput
+              v-if="selectedEvent"
+              label="Название записи"
+              type="text"
+              placeholder="Имя клиента или телефон"
+              :model-value="selectedEvent.title"
+              @update:modelValue="selectedEvent.title = $event"
+            />
+            <FormInput
+              v-if="selectedEvent"
+              label="Сумма"
+              type="number"
+              suffix="тг."
+              :model-value="selectedEvent.price"
+              @update:modelValue="selectedEvent.price = $event"
+            />
+            <FormSelect
+              v-if="selectedEvent"
+              label="Номер"
+              :model-value="selectedEvent.split"
+              :options="roomOptions"
+              @update:modelValue="selectedEvent.split = $event"
+            />
+
+            <div class="date-field">
+              <label class="date-field-label">Заезд</label>
+              <button id="hotel-edit-start-trigger" class="date-field-btn" type="button">{{ formatShort(timeStartDate) }}</button>
+            </div>
+            <ion-modal :keep-contents-mounted="true" trigger="hotel-edit-start-trigger" ref="editStartModal">
+              <MonthCalendar :model-value="timeStartDate" :events="events" @update:modelValue="onPickEditStart" />
+            </ion-modal>
+
+            <div class="date-field">
+              <label class="date-field-label">Выезд</label>
+              <button id="hotel-edit-end-trigger" class="date-field-btn" type="button">{{ formatShort(timeEndDate) }}</button>
+            </div>
+            <ion-modal :keep-contents-mounted="true" trigger="hotel-edit-end-trigger" ref="editEndModal">
+              <MonthCalendar :model-value="timeEndDate" :events="events" @update:modelValue="onPickEditEnd" />
+            </ion-modal>
+
+            <ion-button expand="block" class="delete-btn" color="danger" @click="deleteEvent">Удалить</ion-button>
           </ion-content>
         </ion-modal>
       </div>
@@ -182,9 +171,9 @@
 
 <script>
 import moment from "moment";
-import "moment/locale/ru";
-import VueCal from "vue-cal";
-import "vue-cal/dist/vuecal.css";
+import MonthCalendar from "@/components/MonthCalendar.vue";
+import FormInput from "@/components/FormInput.vue";
+import FormSelect from "@/components/FormSelect.vue";
 import {
   IonContent,
   IonHeader,
@@ -192,59 +181,43 @@ import {
   IonToolbar,
   IonButton,
   IonModal,
-  IonDatetime,
-  IonRow,
-  IonCol,
-  IonLabel,
-  IonInput,
-  IonSelect,
-  IonSelectOption,
-  IonText,
-  IonButtons,
-  IonItem,
+  IonIcon,
 } from "@ionic/vue";
+import { refreshOutline } from "ionicons/icons";
 
 export default {
   name: "HotelPage",
   components: {
-    VueCal,
     IonContent,
     IonHeader,
     IonPage,
     IonToolbar,
     IonButton,
     IonModal,
-    IonDatetime,
-    IonRow,
-    IonCol,
-    IonLabel,
-    IonInput,
-    IonSelect,
-    IonSelectOption,
-    IonText,
-    IonButtons,
-    IonItem,
+    IonIcon,
+    MonthCalendar,
+    FormInput,
+    FormSelect,
   },
   data() {
     return {
+      refreshIcon: refreshOutline,
       timeStartDate: null,
       timeEndDate: null,
       selectedDate: moment().format("YYYY-MM-DD"),
       today: moment().format("YYYY-MM-DD"),
-      idx: 0,
-      calView: 'day',
       events: [],
       splitDays: [
-        { id: 1,  color: "blue",    label: "Номер 1",  class: "split1"  },
-        { id: 2,  color: "green",   label: "Номер 2",  class: "split2"  },
-        { id: 3,  color: "orange",  label: "Номер 3",  class: "split3"  },
-        { id: 4,  color: "red",     label: "Номер 4",  class: "split4"  },
-        { id: 5,  color: "purple",  label: "Номер 5",  class: "split5"  },
-        { id: 6,  color: "teal",    label: "Номер 6",  class: "split6"  },
-        { id: 7,  color: "brown",   label: "Номер 7",  class: "split7"  },
-        { id: 8,  color: "navy",    label: "Номер 8",  class: "split8"  },
-        { id: 9,  color: "olive",   label: "Номер 9",  class: "split9"  },
-        { id: 10, color: "crimson", label: "Номер 10", class: "split10" },
+        { id: 1,  color: "#2196f3", label: "Номер 1" },
+        { id: 2,  color: "#4caf50", label: "Номер 2" },
+        { id: 3,  color: "#ff9800", label: "Номер 3" },
+        { id: 4,  color: "#f44336", label: "Номер 4" },
+        { id: 5,  color: "#9c27b0", label: "Номер 5" },
+        { id: 6,  color: "#009688", label: "Номер 6" },
+        { id: 7,  color: "#795548", label: "Номер 7" },
+        { id: 8,  color: "#3f51b5", label: "Номер 8" },
+        { id: 9,  color: "#827717", label: "Номер 9" },
+        { id: 10, color: "#d32f2f", label: "Номер 10" },
       ],
       isOpen: false,
       showEvent: false,
@@ -262,20 +235,73 @@ export default {
       classes: ['blue-event', 'green-event', 'orange-event', 'red-event', 'purple-event', 'teal-event', 'brown-event', 'navy-event', 'olive-event', 'crimson-event'],
     };
   },
+  computed: {
+    roomOptions() {
+      return this.splitDays.map((room) => ({ value: room.id, label: room.label }));
+    },
+    formattedDate() {
+      const date = new Date(`${this.selectedDate}T00:00:00`);
+      const str = new Intl.DateTimeFormat("ru-RU", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }).format(date);
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    },
+  },
   async mounted() {
     await this.getEvents();
   },
   methods: {
-    onCalReady() {
-      this.$nextTick(() => {
-        this.$refs.dateCal.switchView('day', new Date(this.selectedDate));
-      });
+    hexToRgba(hex, alpha) {
+      const h = hex.replace('#', '');
+      const bigint = parseInt(h, 16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     },
-    onViewChange({ startDate, view }) {
-      this.calView = view;
-      if (view === 'day') {
-        this.selectedDate = moment(startDate).format('YYYY-MM-DD');
-      }
+    formatShort(date) {
+      if (!date) return 'Выберите дату';
+      const d = new Date(`${date}T00:00:00`);
+      return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" }).format(d);
+    },
+    goToday() {
+      this.selectedDate = this.today;
+    },
+    prevDay() {
+      const now = Date.now();
+      if (now - (this._lastNavClick || 0) < 120) return;
+      this._lastNavClick = now;
+      this.selectedDate = moment(this.selectedDate).subtract(1, 'day').format('YYYY-MM-DD');
+    },
+    nextDay() {
+      const now = Date.now();
+      if (now - (this._lastNavClick || 0) < 120) return;
+      this._lastNavClick = now;
+      this.selectedDate = moment(this.selectedDate).add(1, 'day').format('YYYY-MM-DD');
+    },
+    onPickDate(date) {
+      this.selectedDate = date;
+      if (this.$refs.dateModal) this.$refs.dateModal.$el.dismiss();
+    },
+    onPickStart(date) {
+      this.newEvent.start = date;
+      this.newEvent.end = moment(date).add(1, 'days').format('YYYY-MM-DD');
+      if (this.$refs.addStartModal) this.$refs.addStartModal.$el.dismiss();
+    },
+    onPickEnd(date) {
+      this.newEvent.end = date;
+      if (this.$refs.addEndModal) this.$refs.addEndModal.$el.dismiss();
+    },
+    onPickEditStart(date) {
+      this.timeStartDate = date;
+      if (this.$refs.editStartModal) this.$refs.editStartModal.$el.dismiss();
+    },
+    onPickEditEnd(date) {
+      this.timeEndDate = date;
+      if (this.$refs.editEndModal) this.$refs.editEndModal.$el.dismiss();
     },
     getEventsForRoom(roomId) {
       return this.events.filter(e => {
@@ -283,12 +309,6 @@ export default {
         const end = e.end.split(' ')[0];
         return e.split === roomId && this.selectedDate >= start && this.selectedDate < end;
       });
-    },
-    onStartChange() {
-      const start = this.newEvent.start ? this.newEvent.start.split('T')[0] : null;
-      if (start) {
-        this.newEvent.end = moment(start).add(1, 'days').format('YYYY-MM-DD');
-      }
     },
     async getEvents() {
       this.events = [];
@@ -396,121 +416,180 @@ export default {
 };
 </script>
 
-<style>
-/* всегда скрыто */
-.hotel-cal-wrap .vuecal__menu {
-  display: none !important;
-}
-/* скрываем тело только в day view */
-.hotel-cal-wrap:not(.hotel-cal-wrap--month) .vuecal__body,
-.hotel-cal-wrap:not(.hotel-cal-wrap--month) .vuecal__weekdays-headings,
-.hotel-cal-wrap:not(.hotel-cal-wrap--month) .vuecal__split-days-headers {
-  display: none !important;
-}
-.hotel-cal-wrap {
-  height: auto;
-  overflow: hidden;
-}
-.hotel-cal-wrap--month {
-  height: calc(100vh - 200px);
-  min-height: 380px;
-}
-.hotel-cal-wrap .vuecal {
-  box-shadow: none;
-  height: 100%;
-  min-height: 0;
-}
-.hotel-cal-wrap .vuecal__title-bar {
-  font-size: 2em;
-  color: black !important;
-}
-</style>
-
 <style scoped>
+.hotel-toolbar {
+  --background: transparent;
+  --border-color: transparent;
+  --min-height: auto;
+  --padding-start: 0;
+  --padding-end: 0;
+  --padding-top: 0;
+  --padding-bottom: 0;
+}
+
+.header-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  padding: 14px 16px;
+  margin: 6px 10px 0;
+}
+
+.header-title {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #1c1c1e;
+}
+
+.header-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.header-btn.today {
+  color: #2196f3;
+}
+
+.header-btn.refresh {
+  color: #9aa0a6;
+}
+
+.header-btn ion-icon {
+  font-size: 16px;
+}
+
 .page-root {
   display: flex;
   flex-direction: column;
+  padding: 10px 10px 4px;
+  background: #f4f5f7;
 }
 
-.rooms-grid {
-  display: flex;
-  flex-direction: column;
+.add-btn {
+  --border-radius: 12px;
+  font-weight: 700;
+  margin: 0 2px 14px;
 }
 
-.room-row {
-  display: flex;
-  align-items: stretch;
-  border-bottom: 1px solid #e0e0e0;
-  min-height: 64px;
-}
-
-.room-label {
-  width: 80px;
-  min-width: 80px;
+.date-nav {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.85rem;
-  border-right: 1px solid #e0e0e0;
-  padding: 8px 4px;
-  text-align: center;
+  gap: 6px;
+  margin: 0 2px 14px;
 }
 
-.room-row.split1  .room-label { background-color: rgba(226, 242, 253, 0.7); }
-.room-row.split2  .room-label { background-color: rgba(232, 245, 233, 0.7); }
-.room-row.split3  .room-label { background-color: rgba(255, 243, 224, 0.7); }
-.room-row.split4  .room-label { background-color: rgba(255, 235, 238, 0.7); }
-.room-row.split5  .room-label { background-color: rgba(237, 231, 246, 0.7); }
-.room-row.split6  .room-label { background-color: rgba(224, 247, 250, 0.7); }
-.room-row.split7  .room-label { background-color: rgba(239, 229, 220, 0.7); }
-.room-row.split8  .room-label { background-color: rgba(221, 228, 243, 0.7); }
-.room-row.split9  .room-label { background-color: rgba(240, 244, 220, 0.7); }
-.room-row.split10 .room-label { background-color: rgba(252, 228, 228, 0.7); }
+.nav-arrow {
+  border: none;
+  background: transparent;
+  color: #9aa0a6;
+  font-size: 22px;
+  line-height: 1;
+  padding: 4px 10px;
+  cursor: pointer;
+}
 
-.room-events {
-  flex: 1;
-  padding: 6px 8px;
+.date-pill {
+  border: none;
+  background: #eef0f3;
+  border-radius: 18px;
+  padding: 8px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #2b2f33;
+  cursor: pointer;
+  width: 270px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rooms-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  justify-content: center;
+  gap: 10px;
 }
 
-.room-row.split1  { background-color: rgba(226, 242, 253, 0.4); }
-.room-row.split2  { background-color: rgba(232, 245, 233, 0.4); }
-.room-row.split3  { background-color: rgba(255, 243, 224, 0.4); }
-.room-row.split4  { background-color: rgba(255, 235, 238, 0.4); }
-.room-row.split5  { background-color: rgba(237, 231, 246, 0.4); }
-.room-row.split6  { background-color: rgba(224, 247, 250, 0.4); }
-.room-row.split7  { background-color: rgba(239, 229, 220, 0.4); }
-.room-row.split8  { background-color: rgba(221, 228, 243, 0.4); }
-.room-row.split9  { background-color: rgba(240, 244, 220, 0.4); }
-.room-row.split10 { background-color: rgba(252, 228, 228, 0.4); }
-
-.empty-room {
-  height: 40px;
+.room-pill {
+  border-radius: 14px;
+  padding: 14px 16px;
 }
 
-.event-card {
-  border-radius: 6px;
-  padding: 6px 10px;
-  border: 1.5px solid rgba(0,0,0,0.15);
+.room-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.room-events {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.room-event {
+  border-radius: 10px;
+  border: 1.5px solid;
+  padding: 8px 10px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
 }
 
-.event-title { font-weight: 600; }
-.event-dates { font-size: 0.75rem; opacity: 0.8; }
-.event-price { font-size: 0.75rem; }
+.event-title { font-weight: 700; }
+.event-dates { color: #5b5f66; font-size: 0.75rem; margin-top: 1px; }
+.event-price { font-weight: 700; font-size: 0.78rem; margin-top: 1px; }
 
-.blue-event    { background-color: rgba(112, 192, 245, 0.7); }
-.green-event   { background-color: rgba(137, 243, 146, 0.7); }
-.orange-event  { background-color: rgba(245, 207, 146, 0.7); }
-.red-event     { background-color: rgba(247, 143, 158, 0.7); }
-.purple-event  { background-color: rgba(186, 104, 200, 0.7); }
-.teal-event    { background-color: rgba(100, 220, 220, 0.7); }
-.brown-event   { background-color: rgba(188, 143, 100, 0.7); }
-.navy-event    { background-color: rgba(100, 130, 200, 0.7); }
-.olive-event   { background-color: rgba(180, 200, 100, 0.7); }
-.crimson-event { background-color: rgba(220, 80,  100, 0.7); }
+.hotel-modal {
+  --border-radius: 20px;
+}
+
+.hotel-modal-toolbar {
+  --border-color: transparent;
+}
+
+.date-field {
+  margin-bottom: 6px;
+}
+
+.date-field-label {
+  display: block;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: #1c1c1e;
+  margin-bottom: 6px;
+}
+
+.date-field-btn {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  background: #eef0f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2196f3;
+  text-align: left;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+
+.delete-btn {
+  --border-radius: 24px;
+  font-weight: 700;
+  margin-top: 12px;
+}
 </style>
