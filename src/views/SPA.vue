@@ -336,7 +336,7 @@ export default {
         },
       },
       duration: null,
-      min_hour: 9,
+      min_hour: 3,
       max_hour: 27,
       newEvent: {
         title: '',
@@ -864,31 +864,52 @@ ion-page {
 
 .event-card {
   position: absolute;
-  left: 3px;
-  right: 3px;
+  left: 2px;
+  right: 2px;
   border-radius: 10px;
-  padding: 4px 5px;
+  padding: 3px 3px;
   cursor: pointer;
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   box-sizing: border-box;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.event-card > div:not(.event-title) {
+  flex-shrink: 0;
 }
 
 .event-title {
+  flex-shrink: 1;
+  min-height: 0;
   font-weight: 700;
+  font-size: 0.78rem;
+  line-height: 1.15;
+  white-space: normal;
+  overflow: hidden;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.event-time {
+  color: #6a6f75;
+  font-size: 0.6rem;
+  margin: 1px 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.event-time { color: #6a6f75; font-size: 0.64rem; margin: 1px 0; }
 .event-meta {
   color: #2e7d32;
-  font-size: 0.66rem;
+  font-size: 0.58rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.event-price { font-weight: 700; font-size: 0.68rem; }
+.event-price { font-weight: 700; font-size: 0.72rem; }
 
 .event-card.blue-event   { background-color: rgba(33, 150, 243, 0.16); border: 1.5px solid rgba(33, 150, 243, 0.55); }
 .event-card.green-event  { background-color: rgba(76, 175, 80, 0.16); border: 1.5px solid rgba(76, 175, 80, 0.55); }

@@ -13,7 +13,10 @@
     </ion-header>
     <ion-content :scrollY="false">
       <div class="page-root">
-        <button id="cw-date-trigger" class="date-pill" type="button">{{ formattedDate }}</button>
+        <div class="date-row">
+          <button id="cw-date-trigger" class="date-pill" type="button">{{ formattedDate }}</button>
+          <div class="record-count">Записей: <span>{{ cars.length }}</span></div>
+        </div>
         <ion-modal :keep-contents-mounted="true" trigger="cw-date-trigger" ref="dateModal">
           <MonthCalendar
             :model-value="today"
@@ -99,6 +102,15 @@ import {
 } from "@ionic/vue";
 import { refreshOutline } from "ionicons/icons";
 
+// Business day runs 06:00 to 06:00 next day, so before 6am still belongs to yesterday's schedule.
+function computeBusinessDay(date) {
+  const d = moment(date);
+  if (d.hour() < 6) {
+    return d.clone().subtract(1, "day").format("YYYY-MM-DD");
+  }
+  return d.format("YYYY-MM-DD");
+}
+
 export default {
   name: 'Car Wash',
   components: {
@@ -119,7 +131,7 @@ export default {
       curDate: moment(new Date()).format("YYYY-MM-DD HH:mm"),
       cars: [],
       allCars: [],
-      today: moment(new Date()).format("YYYY-MM-DD"),
+      today: computeBusinessDay(new Date()),
       showEvent: false,
       selectedEvent: null,
       timeStartDate: null,
@@ -149,20 +161,25 @@ export default {
         all.push(r)
       }
       this.allCars = all;
-      this.cars = all.filter(a => a.start.split(' ')[0] == this.today).sort((a, b) => b.start.localeCompare(a.start));
+      const dayStart = moment(this.today, "YYYY-MM-DD").add(6, "hours");
+      const dayEnd = dayStart.clone().add(24, "hours");
+      this.cars = all.filter(a => {
+        const s = moment(a.start, "YYYY-MM-DD HH:mm");
+        return s.isSameOrAfter(dayStart) && s.isBefore(dayEnd);
+      }).sort((a, b) => b.start.localeCompare(a.start));
     },
     onPickDate(date) {
       this.today = date;
       if (this.$refs.dateModal) this.$refs.dateModal.$el.dismiss();
     },
     async addItem() {
-      const d = moment(new Date()).format("YYYY-MM-DD HH:mm")
+      const start = moment(new Date()).format("YYYY-MM-DD HH:mm")
       const response = await fetch('http://79.76.52.210:8000/record-car', {
         method: 'post',
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({title: '', price: 1500, start: `${this.today} ${d.split(' ')[1]}`})
+        body: JSON.stringify({title: '', price: 1500, start})
       });
       const result = await response.json();
       alert(result)
@@ -270,8 +287,15 @@ export default {
   background: #f4f5f7;
 }
 
+.date-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .date-pill {
-  align-self: center;
   border: none;
   background: #eef0f3;
   border-radius: 18px;
@@ -280,7 +304,18 @@ export default {
   font-weight: 600;
   color: #2b2f33;
   cursor: pointer;
-  margin-bottom: 12px;
+}
+
+.record-count {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #6a6f75;
+  white-space: nowrap;
+}
+
+.record-count span {
+  color: #2196f3;
+  font-weight: 700;
 }
 
 .add-btn {
