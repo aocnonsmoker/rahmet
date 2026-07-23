@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from '@ionic/vue-router';
-import TabsPage from '../views/TabsPage.vue'
+import AppShell from '@/layouts/AppShell.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useSectionsStore } from '@/stores/sections';
 
@@ -17,12 +17,14 @@ const routes = [
     component: () => import('@/views/SubscriptionExpired.vue'),
   },
   {
+    // Single entry point for both mobile and desktop — AppShell picks the
+    // shell (bottom tabs vs sidebar) by viewport width, see useViewportStore.
     path: '/tabs/',
-    component: TabsPage,
+    component: AppShell,
     children: [
       {
         path: 'cash',
-        component: () => import('@/views/Cash.vue'),
+        component: () => import('@/views/CashGate.vue'),
         meta: { ownerOnly: true },
       },
       {
@@ -32,7 +34,8 @@ const routes = [
       },
       {
         // Any other tab, e.g. /tabs/spa, /tabs/karaoke — resolved at runtime
-        // against the tenant's sections list (see SectionView.vue).
+        // against the tenant's sections list (see SectionView.vue), which
+        // also picks the mobile/desktop component by viewport width.
         path: ':sectionKey',
         component: () => import('@/views/SectionView.vue'),
       },

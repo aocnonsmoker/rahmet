@@ -75,7 +75,8 @@
                     <div v-if="record.price" class="event-price">{{ record.price }} тг.</div>
                   </div>
                   <div v-else>
-                    <div v-if="record.adult || record.child" class="event-meta">В: {{ record.adult }} · Д: {{ record.child }}</div>
+                    <div v-if="guestFields === 'split' && (record.adult || record.child)" class="event-meta">В: {{ record.adult }} · Д: {{ record.child }}</div>
+                    <div v-else-if="guestFields === 'single' && record.adult" class="event-meta">Кол-во: {{ record.adult }}</div>
                     <div v-if="record.price" class="event-price">{{ record.price }} тг.</div>
                   </div>
                 </div>
@@ -108,7 +109,7 @@
               @update:modelValue="newRecord.title = $event"
             />
 
-            <div class="form-row">
+            <div v-if="guestFields === 'split'" class="form-row">
               <FormInput
                 label="Взрослые"
                 type="number"
@@ -122,6 +123,13 @@
                 @update:modelValue="newRecord.child = $event"
               />
             </div>
+            <FormInput
+              v-else-if="guestFields === 'single'"
+              label="Количество человек"
+              type="number"
+              :model-value="newRecord.adult"
+              @update:modelValue="newRecord.adult = $event"
+            />
 
             <button class="date-chip" type="button" @click="showAddDateModal = true">{{ addModalDateLabel }}</button>
             <ion-modal :keep-contents-mounted="true" :is-open="showAddDateModal" @didDismiss="showAddDateModal = false">
@@ -200,7 +208,7 @@
               @update:modelValue="selectedRecord.title = $event"
             />
 
-            <div class="form-row">
+            <div v-if="guestFields === 'split'" class="form-row">
               <FormInput
                 label="Взрослые"
                 type="number"
@@ -214,6 +222,13 @@
                 @update:modelValue="selectedRecord.child = $event"
               />
             </div>
+            <FormInput
+              v-else-if="guestFields === 'single'"
+              label="Количество человек"
+              type="number"
+              :model-value="selectedRecord.adult"
+              @update:modelValue="selectedRecord.adult = $event"
+            />
 
             <FormInput
               label="Сумма"
@@ -269,10 +284,11 @@ import { apiFetch } from "@/services/api";
 import { showAlert, showConfirm } from "@/services/dialogs";
 import { useAuthStore } from "@/stores/auth";
 
-// Business day runs ~9:00 to 3:00 next day, so before 3am still belongs to yesterday's schedule.
+// Business day runs 06:00 to 06:00 next day, so before 6am still belongs to
+// yesterday's schedule — matches the queue template's cutoff (QueueListView.vue).
 function computeBusinessDay(date) {
   const d = moment(date);
-  if (d.hour() < 3) {
+  if (d.hour() < 6) {
     return d.clone().subtract(1, "day").format("YYYY-MM-DD");
   }
   return d.format("YYYY-MM-DD");
@@ -298,6 +314,7 @@ export default {
     sectionKey: { type: String, required: true },
     label: { type: String, required: true },
     slotStepMinutes: { type: Number, default: 30 },
+    guestFields: { type: String, default: 'split' },
   },
   data() {
     const now = new Date();
@@ -327,8 +344,8 @@ export default {
       showRecord: false,
       selectedRecord: null,
       duration: null,
-      min_hour: 3,
-      max_hour: 27,
+      min_hour: 6,
+      max_hour: 30,
       newRecord: {
         title: '',
         adult: 0,

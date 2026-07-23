@@ -4,7 +4,7 @@
       <ion-toolbar class="settings-toolbar">
         <div class="header-card">
           <div class="header-title">Настройки</div>
-          <HeaderMenuButton />
+          <HeaderMenuButton v-if="!isDesktopRoute" />
         </div>
       </ion-toolbar>
     </ion-header>
@@ -88,6 +88,14 @@
                 @update:modelValue="editingSection.slot_step_minutes = $event"
               />
 
+              <FormSelect
+                v-if="editingSection.template === 'time_slot'"
+                label="Учёт людей"
+                :model-value="editingSection.guest_fields"
+                :options="guestFieldsOptions"
+                @update:modelValue="editingSection.guest_fields = $event"
+              />
+
               <template v-if="editingSection.template !== 'queue'">
                 <div class="resource-list">
                   <div v-for="r in resources" :key="r.id" class="resource-row" :style="{ borderColor: r.color }">
@@ -158,6 +166,13 @@
               :model-value="newSection.slot_step_minutes"
               :options="slotStepOptions"
               @update:modelValue="newSection.slot_step_minutes = $event"
+            />
+            <FormSelect
+              v-if="newSection.template === 'time_slot'"
+              label="Учёт людей"
+              :model-value="newSection.guest_fields"
+              :options="guestFieldsOptions"
+              @update:modelValue="newSection.guest_fields = $event"
             />
           </ion-content>
         </ion-modal>
@@ -234,13 +249,6 @@
                 @click="newResource.color = c"
               ></button>
             </div>
-            <FormInput
-              label="Количество"
-              type="number"
-              placeholder="1"
-              :model-value="newResource.quantity"
-              @update:modelValue="newResource.quantity = $event"
-            />
           </ion-content>
         </ion-modal>
 
@@ -336,6 +344,7 @@ import HeaderMenuButton from '@/components/HeaderMenuButton.vue';
 import { apiFetch } from '@/services/api';
 import { showAlert, showConfirm } from '@/services/dialogs';
 import { useSectionsStore } from '@/stores/sections';
+import { useViewportStore } from '@/stores/viewport';
 
 const TEMPLATE_LABELS = {
   time_slot: 'Бронь по времени',
@@ -372,7 +381,7 @@ export default {
       editingSection: null,
       savingSectionEdit: false,
       showAddSection: false,
-      newSection: { icon: '', label: '', template: 'time_slot', slot_step_minutes: 30 },
+      newSection: { icon: '', label: '', template: 'time_slot', slot_step_minutes: 30, guest_fields: 'none' },
       creatingSection: false,
 
       resourceSection: '',
@@ -383,7 +392,7 @@ export default {
       savingResource: false,
 
       showAddResource: false,
-      newResource: { label: '', color: '#2196f3', quantity: 1 },
+      newResource: { label: '', color: '#2196f3' },
       creatingResources: false,
 
       staff: [],
@@ -397,6 +406,12 @@ export default {
     };
   },
   computed: {
+    // This component is reused as-is in the desktop sidebar layout — its
+    // own sidebar already covers Касса/Выход, so the mobile kebab menu is
+    // just redundant clutter there.
+    isDesktopRoute() {
+      return useViewportStore().isDesktop;
+    },
     roleOptions() {
       return [
         { value: 'employee', label: 'Сотрудник' },
@@ -415,6 +430,13 @@ export default {
         { value: 15, label: 'Каждые 15 минут' },
         { value: 30, label: 'Каждые 30 минут' },
         { value: 60, label: 'Каждый час' },
+      ];
+    },
+    guestFieldsOptions() {
+      return [
+        { value: 'none', label: 'Не учитывать' },
+        { value: 'single', label: 'Одно поле' },
+        { value: 'split', label: 'Взрослые и детские' },
       ];
     },
     enabledSectionKeys() {
@@ -468,6 +490,7 @@ export default {
         const body = { label: this.editingSection.label.trim(), icon: this.editingSection.icon.trim() };
         if (this.editingSection.template === 'time_slot') {
           body.slot_step_minutes = this.editingSection.slot_step_minutes;
+          body.guest_fields = this.editingSection.guest_fields;
         }
         await apiFetch(`/sections/${this.editingSection.id}`, { method: 'PUT', body });
         this.showEditSection = false;
@@ -502,9 +525,10 @@ export default {
             icon: this.newSection.icon.trim(),
             template: this.newSection.template,
             slot_step_minutes: this.newSection.slot_step_minutes,
+            guest_fields: this.newSection.guest_fields,
           },
         });
-        this.newSection = { icon: '', label: '', template: 'time_slot', slot_step_minutes: 30 };
+        this.newSection = { icon: '', label: '', template: 'time_slot', slot_step_minutes: 30, guest_fields: 'none' };
         this.showAddSection = false;
         await this.loadSections();
       } catch (e) {
@@ -544,7 +568,7 @@ export default {
       this.resources = this.resources.filter((x) => x.id !== r.id);
     },
     openAddResource() {
-      this.newResource = { label: '', color: '#2196f3', quantity: 1 };
+      this.newResource = { label: '', color: '#2196f3' };
       this.showAddResource = true;
     },
     async addResources() {
@@ -552,21 +576,14 @@ export default {
         await showAlert('Заполните "Название"');
         return;
       }
-      const qty = Math.max(1, Number(this.newResource.quantity) || 1);
-      const baseLabel = this.newResource.label.trim();
       const startOrder = this.resources.length ? Math.max(...this.resources.map((r) => r.sort_order)) : 0;
       this.creatingResources = true;
       try {
-        const created = await Promise.all(
-          Array.from({ length: qty }, (_, i) => {
-            const label = qty === 1 ? baseLabel : `${baseLabel} ${i + 1}`;
-            return apiFetch('/resources', {
-              method: 'POST',
-              body: { section: this.resourceSection, label, color: this.newResource.color, sort_order: startOrder + i + 1 },
-            });
-          })
-        );
-        this.resources.push(...created);
+        const created = await apiFetch('/resources', {
+          method: 'POST',
+          body: { section: this.resourceSection, label: this.newResource.label.trim(), color: this.newResource.color, sort_order: startOrder + 1 },
+        });
+        this.resources.push(created);
         this.showAddResource = false;
       } finally {
         this.creatingResources = false;

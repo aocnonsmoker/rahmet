@@ -6,15 +6,17 @@
         <span :class="{ 'ff-placeholder': !selectedLabel }">{{ selectedLabel || placeholder }}</span>
         <span class="ff-arrow">▾</span>
       </button>
-      <div v-if="isOpen" class="ff-dropdown">
-        <div
-          v-for="opt in options"
-          :key="opt.value"
-          class="ff-option"
-          :class="{ 'is-selected': opt.value == modelValue }"
-          @click="select(opt.value)"
-        >{{ opt.label }}</div>
-      </div>
+      <Teleport to="body">
+        <div v-if="isOpen" class="ff-dropdown" :style="dropdownStyle">
+          <div
+            v-for="opt in options"
+            :key="opt.value"
+            class="ff-option"
+            :class="{ 'is-selected': opt.value == modelValue }"
+            @click="select(opt.value)"
+          >{{ opt.label }}</div>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -45,6 +47,7 @@ export default {
     return {
       isOpen: false,
       openUpward: false,
+      dropdownStyle: {},
     };
   },
   computed: {
@@ -55,16 +58,49 @@ export default {
   },
   mounted() {
     document.addEventListener("click", this.onDocumentClick);
+    // capture:true so this also fires for scroll on any nested scrollable
+    // ancestor (e.g. a modal body) — scroll doesn't bubble, only capture.
+    window.addEventListener("scroll", this.onWindowScroll, true);
+    window.addEventListener("resize", this.close);
   },
   beforeUnmount() {
     document.removeEventListener("click", this.onDocumentClick);
+    window.removeEventListener("scroll", this.onWindowScroll, true);
+    window.removeEventListener("resize", this.close);
   },
   methods: {
     toggle() {
       if (!this.isOpen) {
         this.openUpward = this.shouldOpenUpward();
+        this.updateDropdownPosition();
       }
       this.isOpen = !this.isOpen;
+    },
+    close() {
+      this.isOpen = false;
+    },
+    onWindowScroll(e) {
+      // The dropdown's own option list scrolling also fires a (captured)
+      // scroll event — only close for an ancestor container scrolling,
+      // not for the user scrolling through the options themselves.
+      if (e.target && e.target.closest && e.target.closest(".ff-dropdown")) return;
+      this.close();
+    },
+    // Positioned relative to the viewport (not the trigger's offset parent)
+    // and teleported to <body> so a scrollable ancestor (e.g. a modal body)
+    // can't clip it — position:absolute inside an overflow:auto container
+    // gets cut off there regardless of z-index.
+    updateDropdownPosition() {
+      const trigger = this.$refs.trigger;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const style = { position: "fixed", left: `${rect.left}px`, width: `${rect.width}px` };
+      if (this.openUpward) {
+        style.bottom = `${window.innerHeight - rect.top}px`;
+      } else {
+        style.top = `${rect.bottom}px`;
+      }
+      this.dropdownStyle = style;
     },
     shouldOpenUpward() {
       const trigger = this.$refs.trigger;
@@ -80,7 +116,7 @@ export default {
       this.isOpen = false;
     },
     onDocumentClick(e) {
-      if (!this.$el.contains(e.target)) {
+      if (!this.$el.contains(e.target) && !e.target.closest(".ff-dropdown")) {
         this.isOpen = false;
       }
     },
@@ -147,16 +183,16 @@ export default {
 }
 
 .ff-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
+  /* position/left/top or bottom/width come from the dropdownStyle inline
+     style (computed from the trigger's bounding rect) — teleported to
+     <body> and position:fixed so a scrollable ancestor (e.g. a modal body)
+     can't clip it. */
   background: #fff;
   border-radius: 0 0 14px 14px;
   box-shadow: 0 0 0 2px #2196f3 inset, 0 12px 24px rgba(0, 0, 0, 0.12);
   max-height: 260px;
   overflow-y: auto;
-  z-index: 30;
+  z-index: 99999;
 }
 
 /* When there isn't enough room below the trigger (e.g. near the bottom of a
@@ -166,8 +202,6 @@ export default {
 }
 
 .ff-wrap.open-up .ff-dropdown {
-  top: auto;
-  bottom: 100%;
   border-radius: 14px 14px 0 0;
 }
 
