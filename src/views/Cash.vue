@@ -4,11 +4,12 @@
       <ion-toolbar class="cash-toolbar">
         <div class="header-card">
           <div class="header-title">Касса</div>
-          <div class="header-total">Итого: {{ totalSpa + totalCar + totalPS + totalHotel }} тг.</div>
+          <div class="header-total">Итого: {{ totalToday }} тг.</div>
           <button class="header-btn refresh" type="button" @click="refreshAll">
             <ion-icon :icon="refreshIcon"></ion-icon>
             Обновить
           </button>
+          <HeaderMenuButton />
         </div>
       </ion-toolbar>
     </ion-header>
@@ -23,8 +24,8 @@
 
           <!-- Касса -->
           <div v-if="tab === 1">
-            <button id="cash-date-trigger" class="date-pill" type="button">{{ formattedToday }}</button>
-            <ion-modal :keep-contents-mounted="true" trigger="cash-date-trigger" ref="dateModal">
+            <button class="date-pill" type="button" @click="showDateModal = true">{{ formattedToday }}</button>
+            <ion-modal :keep-contents-mounted="true" :is-open="showDateModal" @didDismiss="showDateModal = false">
               <MonthCalendar
                 :model-value="today"
                 :events="allRecordsForBadges"
@@ -33,17 +34,9 @@
             </ion-modal>
 
             <div class="totals-list">
-              <div class="totals-row">
-                <span class="totals-label"><span class="dot"></span>Баня</span>
-                <span class="totals-value">{{ totalSpa }} тг.</span>
-              </div>
-              <div class="totals-row">
-                <span class="totals-label"><span class="dot"></span>Автомойка</span>
-                <span class="totals-value">{{ totalCar }} тг.</span>
-              </div>
-              <div class="totals-row">
-                <span class="totals-label"><span class="dot"></span>Гостиница</span>
-                <span class="totals-value">{{ totalHotel }} тг.</span>
+              <div v-for="s in sectionsData" :key="s.key" class="totals-row">
+                <span class="totals-label"><span class="dot"></span>{{ s.icon }} {{ s.label }}</span>
+                <span class="totals-value">{{ todayTotals[s.key] || 0 }} тг.</span>
               </div>
             </div>
           </div>
@@ -74,21 +67,13 @@
             </div>
 
             <div class="totals-list">
-              <div class="totals-row">
-                <span class="totals-label"><span class="dot"></span>Баня</span>
-                <span class="totals-value">{{ analyticTotals.spa }} тг.</span>
-              </div>
-              <div class="totals-row">
-                <span class="totals-label"><span class="dot"></span>Автомойка</span>
-                <span class="totals-value">{{ analyticTotals.car }} тг.</span>
-              </div>
-              <div class="totals-row">
-                <span class="totals-label"><span class="dot"></span>Гостиница</span>
-                <span class="totals-value">{{ analyticTotals.hotel }} тг.</span>
+              <div v-for="s in sectionsData" :key="s.key" class="totals-row">
+                <span class="totals-label"><span class="dot"></span>{{ s.icon }} {{ s.label }}</span>
+                <span class="totals-value">{{ analyticTotals[s.key] || 0 }} тг.</span>
               </div>
               <div class="totals-row totals-row-sum">
                 <span class="totals-label">Итого</span>
-                <span class="totals-value">{{ analyticTotals.spa + analyticTotals.car + analyticTotals.ps + analyticTotals.hotel }} тг.</span>
+                <span class="totals-value">{{ totalAnalytic }} тг.</span>
               </div>
             </div>
 
@@ -106,13 +91,21 @@
 import moment from "moment";
 import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from "chart.js";
 import MonthCalendar from "@/components/MonthCalendar.vue";
+import HeaderMenuButton from "@/components/HeaderMenuButton.vue";
 import {
   IonContent, IonHeader, IonPage, IonToolbar,
   IonModal, IonDatetime, IonIcon,
 } from "@ionic/vue";
 import { refreshOutline } from "ionicons/icons";
+import { apiFetch } from "@/services/api";
+import { useSectionsStore } from "@/stores/sections";
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+
+const CHART_PALETTE = [
+  'rgba(112,192,245,0.8)', 'rgba(137,243,146,0.8)', 'rgba(186,104,200,0.8)',
+  'rgba(255,183,77,0.8)', 'rgba(240,98,146,0.8)', 'rgba(129,199,132,0.8)',
+];
 
 export default {
   name: 'Cash',
@@ -120,23 +113,19 @@ export default {
     IonContent, IonHeader, IonPage, IonToolbar,
     IonModal, IonDatetime, IonIcon,
     MonthCalendar,
+    HeaderMenuButton,
   },
   data() {
     return {
       refreshIcon: refreshOutline,
       tab: 1,
-      cars: [],
-      events: [],
-      pss: [],
-      hotelEvents: [],
+      showDateModal: false,
+      sectionsData: [], // [{ key, label, icon, template, records }]
       today: moment().format("YYYY-MM-DD"),
-      totalSpa: 0,
-      totalCar: 0,
-      totalPS: 0,
-      totalHotel: 0,
+      todayTotals: {},
       analyticFrom: moment().startOf('month').format("YYYY-MM-DD"),
       analyticTo: moment().format("YYYY-MM-DD"),
-      analyticTotals: { spa: 0, car: 0, ps: 0, hotel: 0 },
+      analyticTotals: {},
       chartInstance: null,
       chartWidth: 300,
       chartHeight: 320,
@@ -152,37 +141,40 @@ export default {
       }).format(date);
     },
     allRecordsForBadges() {
-      return [...this.cars, ...this.events, ...this.hotelEvents];
+      return this.sectionsData.flatMap((s) => s.records);
+    },
+    totalToday() {
+      return Object.values(this.todayTotals).reduce((s, v) => s + v, 0);
+    },
+    totalAnalytic() {
+      return Object.values(this.analyticTotals).reduce((s, v) => s + v, 0);
     },
   },
   async mounted() {
     await this.refreshAll();
-    this.$watch('today', this.sumTotal);
+    this.$watch('today', this.sumTotals);
     this.$watch('tab', val => { if (val === 2) this.$nextTick(() => this.buildAnalytic()); });
   },
   methods: {
     onPickDate(date) {
       this.today = date;
-      if (this.$refs.dateModal) this.$refs.dateModal.$el.dismiss();
-    },
-    async fetchData(url, key, formatFn) {
-      const res = await fetch(url);
-      const data = await res.json();
-      this[key] = data.map(formatFn);
+      this.showDateModal = false;
     },
 
     async refreshAll() {
-      await Promise.all([
-        this.fetchData('http://79.76.52.210:8000/car', 'cars',
-          r => ({ ...r, start: this.formatDate(r.start) })),
-        this.fetchData('http://79.76.52.210:8000/ps', 'pss',
-          r => ({ ...r, start: this.formatDate(r.start) })),
-        this.fetchData('http://79.76.52.210:8000/hotel', 'hotelEvents',
-          r => ({ ...r, start: this.formatDate(r.start), end: this.formatDate(r.end) })),
-        this.fetchData('http://79.76.52.210:8000/events', 'events',
-          r => ({ ...r, start: this.formatDate(r.start), end: this.formatDate(r.end) })),
-      ]);
-      this.sumTotal();
+      const sections = useSectionsStore();
+      await sections.refresh();
+      const enabled = sections.items.filter((s) => s.enabled);
+      this.sectionsData = await Promise.all(enabled.map(async (s) => {
+        const result = await apiFetch(`/records?section=${s.key}`);
+        const records = result.map((r) => ({
+          ...r,
+          start: this.formatDate(r.start),
+          end: r.end ? this.formatDate(r.end) : null,
+        }));
+        return { key: s.key, label: s.label, icon: s.icon, template: s.template, records };
+      }));
+      this.sumTotals();
       if (this.tab === 2) this.buildAnalytic();
     },
 
@@ -202,28 +194,36 @@ export default {
       return dt >= range.start && dt < range.end;
     },
 
-    hotelRevenueForDay(day) {
-      return this.hotelEvents
-        .filter(e => {
-          if (!e.price) return false;
-          const s = e.start.split(' ')[0];
-          const en = e.end ? e.end.split(' ')[0] : s;
-          return day >= s && day < en;
-        })
-        .reduce((sum, e) => {
-          const s = e.start.split(' ')[0];
-          const en = e.end ? e.end.split(' ')[0] : s;
-          const days = moment(en).diff(moment(s), 'days') || 1;
-          return sum + Math.round(e.price / days);
-        }, 0);
+    // date_range sections (e.g. Гостиница) bill a multi-day stay proportionally
+    // across the nights it covers; other templates just sum same-day records.
+    revenueForDay(section, day) {
+      if (section.template === 'date_range') {
+        return section.records
+          .filter((r) => {
+            if (!r.price) return false;
+            const s = r.start.split(' ')[0];
+            const en = r.end ? r.end.split(' ')[0] : s;
+            return day >= s && day < en;
+          })
+          .reduce((sum, r) => {
+            const s = r.start.split(' ')[0];
+            const en = r.end ? r.end.split(' ')[0] : s;
+            const days = moment(en).diff(moment(s), 'days') || 1;
+            return sum + Math.round(r.price / days);
+          }, 0);
+      }
+      const range = this.getDayRange(day);
+      return section.records
+        .filter((r) => r.price && this.isInRange(r.start, range))
+        .reduce((sum, r) => sum + r.price, 0);
     },
 
-    sumTotal() {
-      const range = this.getDayRange(this.today);
-      this.totalCar   = this.cars.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0);
-      this.totalPS    = this.pss.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0);
-      this.totalSpa   = this.events.filter(e => e.price && this.isInRange(e.start, range)).reduce((s, e) => s + e.price, 0);
-      this.totalHotel = this.hotelRevenueForDay(this.today);
+    sumTotals() {
+      const totals = {};
+      for (const section of this.sectionsData) {
+        totals[section.key] = this.revenueForDay(section, this.today);
+      }
+      this.todayTotals = totals;
     },
 
     buildAnalytic() {
@@ -236,28 +236,24 @@ export default {
       const end = moment(to);
       while (cur <= end) { days.push(cur.format('YYYY-MM-DD')); cur = cur.clone().add(1, 'days'); }
 
-      const daySpa = [], dayCar = [], dayPS = [], dayHotel = [];
-      for (const day of days) {
-        const range = this.getDayRange(day);
-        daySpa.push(this.events.filter(e => e.price && this.isInRange(e.start, range)).reduce((s, e) => s + e.price, 0));
-        dayCar.push(this.cars.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0));
-        dayPS.push(this.pss.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0));
-        dayHotel.push(this.hotelRevenueForDay(day));
+      const dailyBySection = {};
+      for (const section of this.sectionsData) {
+        dailyBySection[section.key] = days.map((day) => this.revenueForDay(section, day));
       }
 
-      this.analyticTotals = {
-        spa:   daySpa.reduce((s, v) => s + v, 0),
-        car:   dayCar.reduce((s, v) => s + v, 0),
-        ps:    dayPS.reduce((s, v) => s + v, 0),
-        hotel: dayHotel.reduce((s, v) => s + v, 0),
-      };
+      const totals = {};
+      for (const section of this.sectionsData) {
+        totals[section.key] = dailyBySection[section.key].reduce((s, v) => s + v, 0);
+      }
+      this.analyticTotals = totals;
 
       this.chartWidth = Math.max(300, days.length * 40);
 
-      // Totals per day for label on top
-      const dayTotals = days.map((_, i) => daySpa[i] + dayCar[i] + dayPS[i] + dayHotel[i]);
+      const dayTotals = days.map((_, i) =>
+        this.sectionsData.reduce((sum, s) => sum + dailyBySection[s.key][i], 0)
+      );
 
-      const maxLabel = Math.max(...dayTotals).toLocaleString() + ' тг.';
+      const maxLabel = Math.max(0, ...dayTotals).toLocaleString() + ' тг.';
       const labelPadding = maxLabel.length * 8 + 16;
       this.chartHeight = 260 + labelPadding;
 
@@ -266,7 +262,6 @@ export default {
         afterDatasetsDraw(chart) {
           const { ctx } = chart;
           chart.data.labels.forEach((_, i) => {
-            // Sum only visible datasets for this column
             let total = 0;
             let topBar = null;
             chart.data.datasets.forEach((_, di) => {
@@ -296,11 +291,11 @@ export default {
           type: 'bar',
           data: {
             labels: days.map(d => moment(d).format('DD.MM')),
-            datasets: [
-              { label: 'Баня',      data: daySpa,   backgroundColor: 'rgba(112,192,245,0.8)' },
-              { label: 'Автомойка', data: dayCar,   backgroundColor: 'rgba(137,243,146,0.8)' },
-              { label: 'Гостиница', data: dayHotel, backgroundColor: 'rgba(186,104,200,0.8)' },
-            ],
+            datasets: this.sectionsData.map((s, i) => ({
+              label: s.label,
+              data: dailyBySection[s.key],
+              backgroundColor: CHART_PALETTE[i % CHART_PALETTE.length],
+            })),
           },
           options: {
             responsive: false,

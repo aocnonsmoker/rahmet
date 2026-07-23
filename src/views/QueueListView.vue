@@ -3,51 +3,52 @@
     <ion-header :translucent="true" class="cw-header">
       <ion-toolbar class="cw-toolbar">
         <div class="header-card">
-          <div class="header-title">Автомойка</div>
-          <button class="header-btn refresh" type="button" @click="getCar">
+          <div class="header-title">{{ label }}</div>
+          <button class="header-btn refresh" type="button" @click="getRecords">
             <ion-icon :icon="refreshIcon"></ion-icon>
             Обновить
           </button>
+          <HeaderMenuButton />
         </div>
       </ion-toolbar>
     </ion-header>
     <ion-content :scrollY="false">
       <div class="page-root">
         <div class="date-row">
-          <button id="cw-date-trigger" class="date-pill" type="button">{{ formattedDate }}</button>
-          <div class="record-count">Записей: <span>{{ cars.length }}</span></div>
+          <button class="date-pill" type="button" @click="showDateModal = true">{{ formattedDate }}</button>
+          <div class="record-count">Записей: <span>{{ todayRecords.length }}</span></div>
         </div>
-        <ion-modal :keep-contents-mounted="true" trigger="cw-date-trigger" ref="dateModal">
+        <ion-modal :keep-contents-mounted="true" :is-open="showDateModal" @didDismiss="showDateModal = false">
           <MonthCalendar
             :model-value="today"
-            :events="allCars"
+            :events="allRecords"
             @update:modelValue="onPickDate"
           />
         </ion-modal>
 
-        <ion-button expand="block" class="add-btn" @click="addItem">+ Добавить запись</ion-button>
+        <ion-button v-if="canWrite" expand="block" class="add-btn" @click="openAddModal">+ Добавить запись</ion-button>
 
         <div class="list-wrapper">
           <div class="records-scroll">
             <div
-              v-for="car in cars"
-              :key="car.id"
+              v-for="record in todayRecords"
+              :key="record.id"
               class="record-card"
-              @click="onEventClick(car)"
+              @click="onRecordClick(record)"
             >
               <div class="record-bar"></div>
               <div class="record-body">
-                <div class="record-time">{{ car.start.split(' ')[1] }}</div>
-                <div v-if="car.title" class="record-title">{{ car.title }}</div>
-                <div class="record-price">Сумма: {{ car.price }} тг.</div>
+                <div class="record-time">{{ record.start.split(' ')[1] }}</div>
+                <div v-if="record.title" class="record-title">{{ record.title }}</div>
+                <div class="record-price">Сумма: {{ record.price }} тг.</div>
               </div>
             </div>
-            <div v-if="!cars.length" class="empty-state">Нет записей на этот день</div>
+            <div v-if="!todayRecords.length" class="empty-state">Нет записей на этот день</div>
           </div>
         </div>
       </div>
     </ion-content>
-    <ion-modal class="cw-modal" :is-open="showEvent">
+    <ion-modal class="cw-modal" :is-open="showRecord">
       <ion-header class="cw-modal-header ion-no-border">
         <ion-toolbar class="cw-modal-toolbar">
           <ion-buttons slot="start">
@@ -62,25 +63,59 @@
       </ion-header>
       <ion-content class="ion-padding">
         <FormInput
-          v-if="selectedEvent"
+          v-if="selectedRecord"
           label="Название записи"
           type="text"
           placeholder="Имя клиента или телефон"
-          :model-value="selectedEvent.title"
-          @update:modelValue="selectedEvent.title = $event"
+          :model-value="selectedRecord.title"
+          @update:modelValue="selectedRecord.title = $event"
         />
         <FormInput
-          v-if="selectedEvent"
+          v-if="selectedRecord"
           label="Сумма"
           type="number"
           suffix="тг."
-          :model-value="selectedEvent.price"
-          @update:modelValue="selectedEvent.price = $event"
+          :model-value="selectedRecord.price"
+          @update:modelValue="selectedRecord.price = $event"
         />
         <ion-item>
             <ion-datetime v-model="timeStartDate" presentation="date-time" :prefer-wheel="true"></ion-datetime>
         </ion-item>
-        <ion-button expand="block" class="delete-btn" color="danger" @click="deleteEvent">Удалить</ion-button>
+        <ion-button expand="block" class="delete-btn" color="danger" @click="deleteRecord">Удалить</ion-button>
+      </ion-content>
+    </ion-modal>
+
+    <ion-modal class="cw-modal" :is-open="showAddModal">
+      <ion-header class="cw-modal-header ion-no-border">
+        <ion-toolbar class="cw-modal-toolbar">
+          <ion-buttons slot="start">
+            <ion-button fill="clear" color="medium" @click="showAddModal = false">Отменить</ion-button>
+          </ion-buttons>
+          <ion-buttons slot="end">
+            <ion-button fill="clear" color="primary" :strong="true" @click="confirmAdd()"
+              >Записать</ion-button
+            >
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding">
+        <FormInput
+          label="Название записи"
+          type="text"
+          placeholder="Имя клиента или телефон"
+          :model-value="newRecord.title"
+          @update:modelValue="newRecord.title = $event"
+        />
+        <FormInput
+          label="Сумма"
+          type="number"
+          suffix="тг."
+          :model-value="newRecord.price"
+          @update:modelValue="newRecord.price = $event"
+        />
+        <ion-item>
+            <ion-datetime v-model="newRecordDate" presentation="date-time" :prefer-wheel="true"></ion-datetime>
+        </ion-item>
       </ion-content>
     </ion-modal>
   </ion-page>
@@ -90,6 +125,7 @@
 import moment from "moment";
 import FormInput from "@/components/FormInput.vue";
 import MonthCalendar from "@/components/MonthCalendar.vue";
+import HeaderMenuButton from "@/components/HeaderMenuButton.vue";
 import {
   IonContent,
   IonHeader,
@@ -101,6 +137,9 @@ import {
   IonIcon,
 } from "@ionic/vue";
 import { refreshOutline } from "ionicons/icons";
+import { apiFetch } from "@/services/api";
+import { showAlert, showConfirm } from "@/services/dialogs";
+import { useAuthStore } from "@/stores/auth";
 
 // Business day runs 06:00 to 06:00 next day, so before 6am still belongs to yesterday's schedule.
 function computeBusinessDay(date) {
@@ -112,7 +151,7 @@ function computeBusinessDay(date) {
 }
 
 export default {
-  name: 'Car Wash',
+  name: 'QueueListView',
   components: {
     IonContent,
     IonHeader,
@@ -124,20 +163,30 @@ export default {
     IonIcon,
     FormInput,
     MonthCalendar,
+    HeaderMenuButton,
+  },
+  props: {
+    sectionKey: { type: String, required: true },
+    label: { type: String, required: true },
   },
   data() {
     return {
       refreshIcon: refreshOutline,
-      curDate: moment(new Date()).format("YYYY-MM-DD HH:mm"),
-      cars: [],
-      allCars: [],
+      allRecords: [],
       today: computeBusinessDay(new Date()),
-      showEvent: false,
-      selectedEvent: null,
+      showDateModal: false,
+      showRecord: false,
+      selectedRecord: null,
       timeStartDate: null,
+      showAddModal: false,
+      newRecord: { title: '', price: null },
+      newRecordDate: null,
     }
   },
   computed: {
+    canWrite() {
+      return useAuthStore().canWrite;
+    },
     formattedDate() {
       const date = new Date(`${this.today}T00:00:00`);
       return new Intl.DateTimeFormat("ru-RU", {
@@ -146,83 +195,72 @@ export default {
         year: "numeric",
       }).format(date);
     },
+    todayRecords() {
+      const dayStart = moment(this.today, "YYYY-MM-DD").add(6, "hours");
+      const dayEnd = dayStart.clone().add(24, "hours");
+      return this.allRecords.filter(r => {
+        const s = moment(r.start, "YYYY-MM-DD HH:mm");
+        return s.isSameOrAfter(dayStart) && s.isBefore(dayEnd);
+      }).sort((a, b) => b.start.localeCompare(a.start));
+    },
   },
   async mounted() {
-    await this.getCar();
-    this.$watch('today', this.getCar)
+    await this.getRecords();
   },
   methods: {
-    async getCar() {
-      const response = await fetch('http://79.76.52.210:8000/car');
-      const result = await response.json();
+    async getRecords() {
+      const result = await apiFetch(`/records?section=${this.sectionKey}`);
       const all = [];
       for (const r of result) {
         r.start = r.start.replace("T", " ").slice(0, -3);
         all.push(r)
       }
-      this.allCars = all;
-      const dayStart = moment(this.today, "YYYY-MM-DD").add(6, "hours");
-      const dayEnd = dayStart.clone().add(24, "hours");
-      this.cars = all.filter(a => {
-        const s = moment(a.start, "YYYY-MM-DD HH:mm");
-        return s.isSameOrAfter(dayStart) && s.isBefore(dayEnd);
-      }).sort((a, b) => b.start.localeCompare(a.start));
+      this.allRecords = all;
     },
     onPickDate(date) {
       this.today = date;
-      if (this.$refs.dateModal) this.$refs.dateModal.$el.dismiss();
+      this.showDateModal = false;
     },
-    async addItem() {
-      const start = moment(new Date()).format("YYYY-MM-DD HH:mm")
-      const response = await fetch('http://79.76.52.210:8000/record-car', {
-        method: 'post',
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({title: '', price: 1500, start})
+    openAddModal() {
+      this.newRecord = { title: '', price: null };
+      this.newRecordDate = moment(new Date()).format("YYYY-MM-DDTHH:mm");
+      this.showAddModal = true;
+    },
+    async confirmAdd() {
+      const start = `${this.newRecordDate.split('T')[0]} ${this.newRecordDate.split('T')[1]}`;
+      await apiFetch(`/records?section=${this.sectionKey}`, {
+        method: 'POST',
+        body: { title: this.newRecord.title, price: this.newRecord.price, start },
       });
-      const result = await response.json();
-      alert(result)
-      await this.getCar();
+      await showAlert('Запись добавлена')
+      this.showAddModal = false;
+      await this.getRecords();
     },
-    onEventClick(event) {
-        this.selectedEvent = this.cars.find(item => item.id == event.id);
-        this.timeStartDate = `${this.selectedEvent.start.split(' ')[0]}T${this.selectedEvent.start.split(' ')[1]}`
-        if (this.selectedEvent) {
-            this.showEvent = true;
+    onRecordClick(record) {
+        if (!this.canWrite) return;
+        this.selectedRecord = this.allRecords.find(item => item.id == record.id);
+        this.timeStartDate = `${this.selectedRecord.start.split(' ')[0]}T${this.selectedRecord.start.split(' ')[1]}`
+        if (this.selectedRecord) {
+            this.showRecord = true;
         }
     },
     cancel() {
-      this.showEvent = false;
+      this.showRecord = false;
     },
     async confirmEdit() {
-
-        this.selectedEvent.start = `${this.timeStartDate.split('T')[0]} ${this.timeStartDate.split('T')[1]}`
-        const response = await fetch('http://79.76.52.210:8000/car/' + this.selectedEvent.id, {
-          method: 'put',
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(this.selectedEvent)
-        });
-        const result = await response.json();
-        alert(result)
-        await this.getCar();
-        this.showEvent = false;
+        this.selectedRecord.start = `${this.timeStartDate.split('T')[0]} ${this.timeStartDate.split('T')[1]}`
+        await apiFetch(`/records/${this.selectedRecord.id}?section=${this.sectionKey}`, { method: 'PUT', body: this.selectedRecord });
+        await showAlert('Запись обновлена')
+        await this.getRecords();
+        this.showRecord = false;
     },
-    async deleteEvent() {
-      const apply = confirm('Вы точно хотите удалить запись?')
+    async deleteRecord() {
+      const apply = await showConfirm('Вы точно хотите удалить запись?', { header: 'Удаление', confirmText: 'Удалить' })
       if (apply) {
-        const response = await fetch('http://79.76.52.210:8000/car/' + this.selectedEvent.id, {
-          method: 'delete',
-          headers: {
-            "Content-Type": "application/json"
-          }
-        });
-        const result = await response.json();
-        alert(result)
-        await this.getCar();
-        this.showEvent = false;
+        await apiFetch(`/records/${this.selectedRecord.id}?section=${this.sectionKey}`, { method: 'DELETE' });
+        await showAlert('Запись удалена')
+        await this.getRecords();
+        this.showRecord = false;
       }
     }
   }

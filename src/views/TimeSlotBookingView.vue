@@ -4,83 +4,84 @@
       <ion-toolbar class="spa-toolbar">
         <div class="header-card">
           <button class="header-btn today" type="button" @click="goToday">Сегодня</button>
-          <div class="header-title">Расписание</div>
-          <button class="header-btn refresh" type="button" @click="getEvents">
+          <div class="header-title">{{ label }}</div>
+          <button class="header-btn refresh" type="button" @click="getRecords">
             <ion-icon :icon="refreshIcon"></ion-icon>
             Обновить
           </button>
+          <HeaderMenuButton />
         </div>
       </ion-toolbar>
     </ion-header>
 
     <ion-content :scroll-y="false">
       <div class="page-root">
-        <ion-button expand="block" class="add-btn" @click="setOpen(true)"
+        <ion-button v-if="canWrite" expand="block" class="add-btn" @click="setOpen(true)"
           >+ Добавить запись</ion-button
         >
 
         <div class="date-nav">
           <button class="nav-arrow" type="button" @click="prevDay">‹</button>
-          <button id="date-trigger" class="date-pill" type="button">{{ formattedDate }}</button>
+          <button class="date-pill" type="button" @click="showDateModal = true">{{ formattedDate }}</button>
           <button class="nav-arrow" type="button" @click="nextDay">›</button>
         </div>
-        <ion-modal :keep-contents-mounted="true" trigger="date-trigger" ref="dateModal">
+        <ion-modal :keep-contents-mounted="true" :is-open="showDateModal" @didDismiss="showDateModal = false">
           <MonthCalendar
             :model-value="selectedDate"
-            :events="events"
+            :events="records"
             @update:modelValue="onPickDate"
           />
         </ion-modal>
 
-        <div class="schedule-wrapper">
-          <div class="room-headers">
-            <div class="time-col-spacer"></div>
-            <div
-              v-for="room in splitDays"
-              :key="room.id"
-              class="room-header"
-              :style="`color: ${room.color}`"
-            >
-              <span class="dot" :style="`background: ${room.color}`"></span>{{ room.label }}
-            </div>
-          </div>
-
-          <div class="grid-body" ref="gridBody">
-            <div class="time-col">
+        <div class="schedule-wrapper" ref="scheduleWrapper">
+          <div class="schedule-scroll">
+            <div class="room-headers">
+              <div class="time-col-spacer"></div>
               <div
-                v-for="slot in timeSlots"
-                :key="slot.key"
-                class="time-label"
-                :style="{ height: slotHeight + 'px' }"
-              >{{ slot.label }}</div>
-            </div>
-            <div
-              v-for="room in splitDays"
-              :key="room.id"
-              class="room-col"
-              :class="room.class"
-              :style="{ height: timeSlots.length * slotHeight + 'px' }"
-            >
-              <div
-                v-for="event in eventsForRoom(room.id)"
-                :key="event.id"
-                class="event-card"
-                :class="event.class"
-                :style="eventStyle(event)"
-                @click="onEventClick(event)"
+                v-for="resource in resources"
+                :key="resource.id"
+                class="room-header"
+                :style="{ width: columnWidth + 'px', color: resource.color }"
               >
-                <div class="event-title" v-html="event.title" />
-                <div class="event-time">{{ showDate(event.start) }}–{{ showDate(event.end) }}</div>
-                <div v-if="isLateNight(event)">
-                  <div v-if="event.price" class="event-price">{{ event.price }} тг.</div>
-                </div>
-                <div v-else>
-                  <div v-if="event.adult || event.child" class="event-meta">В: {{ event.adult }} · Д: {{ event.child }}</div>
-                  <div v-if="event.price" class="event-price">{{ event.price }} тг.</div>
-                </div>
+                <span class="dot" :style="`background: ${resource.color}`"></span>{{ resource.label }}
               </div>
             </div>
-            <div v-if="nowLineTop !== null" class="now-line" :style="{ top: nowLineTop + 'px' }"></div>
+
+            <div class="grid-body" ref="gridBody">
+              <div class="time-col">
+                <div
+                  v-for="slot in timeSlots"
+                  :key="slot.key"
+                  class="time-label"
+                  :style="{ height: slotHeight + 'px' }"
+                >{{ slot.label }}</div>
+              </div>
+              <div
+                v-for="resource in resources"
+                :key="resource.id"
+                class="room-col"
+                :style="{ width: columnWidth + 'px', height: timeSlots.length * slotHeight + 'px', backgroundColor: hexToRgba(resource.color, 0.10) }"
+              >
+                <div
+                  v-for="record in recordsForResource(resource.id)"
+                  :key="record.id"
+                  class="event-card"
+                  :style="recordCardStyle(record)"
+                  @click="onRecordClick(record)"
+                >
+                  <div class="event-title" v-html="record.title" />
+                  <div class="event-time">{{ showTime(record.start) }}–{{ showTime(record.end) }}</div>
+                  <div v-if="isLateNight(record)">
+                    <div v-if="record.price" class="event-price">{{ record.price }} тг.</div>
+                  </div>
+                  <div v-else>
+                    <div v-if="record.adult || record.child" class="event-meta">В: {{ record.adult }} · Д: {{ record.child }}</div>
+                    <div v-if="record.price" class="event-price">{{ record.price }} тг.</div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="nowLineTop !== null" class="now-line" :style="{ top: nowLineTop + 'px' }"></div>
+            </div>
           </div>
         </div>
 
@@ -103,30 +104,30 @@
               label="Название записи"
               type="text"
               placeholder="Имя клиента или телефон"
-              :model-value="newEvent.title"
-              @update:modelValue="newEvent.title = $event"
+              :model-value="newRecord.title"
+              @update:modelValue="newRecord.title = $event"
             />
 
             <div class="form-row">
               <FormInput
                 label="Взрослые"
                 type="number"
-                :model-value="newEvent.adult"
-                @update:modelValue="newEvent.adult = $event"
+                :model-value="newRecord.adult"
+                @update:modelValue="newRecord.adult = $event"
               />
               <FormInput
                 label="Детские"
                 type="number"
-                :model-value="newEvent.child"
-                @update:modelValue="newEvent.child = $event"
+                :model-value="newRecord.child"
+                @update:modelValue="newRecord.child = $event"
               />
             </div>
 
-            <button id="add-date-trigger" class="date-chip" type="button">{{ addModalDateLabel }}</button>
-            <ion-modal :keep-contents-mounted="true" trigger="add-date-trigger" ref="addDateModal">
+            <button class="date-chip" type="button" @click="showAddDateModal = true">{{ addModalDateLabel }}</button>
+            <ion-modal :keep-contents-mounted="true" :is-open="showAddDateModal" @didDismiss="showAddDateModal = false">
               <MonthCalendar
                 :model-value="selectedDate"
-                :events="events"
+                :events="records"
                 @update:modelValue="onPickDate"
               />
             </ion-modal>
@@ -143,20 +144,21 @@
               <FormInput
                 label="Введите свое время (час)"
                 type="number"
-                placeholder="000"
+                placeholder="0"
                 :model-value="ownHour"
                 @update:modelValue="ownHour = $event"
               />
               <FormSelect
+                v-if="minuteOptions.length > 1"
                 label="Минут"
                 :model-value="ownMinut"
                 :options="minuteOptions"
                 @update:modelValue="ownMinut = $event"
               />
             </div>
-            <template v-if="duration || (ownHour)">
+            <template v-if="duration || ownHour || ownMinut">
               <div class="slots-scroll">
-                <div v-for="item in splitDays" :key="`${item.id}-${duration}`" class="slots-room">
+                <div v-for="item in resources" :key="`${item.id}-${duration}`" class="slots-room">
                   <div class="slots-room-title" :style="`color: ${item.color}`">
                     <span class="dot" :style="`background: ${item.color}`"></span>{{ item.label }}
                   </div>
@@ -166,8 +168,8 @@
                       :key="i.start"
                       type="button"
                       class="slot-btn"
-                      :style="slotStyle(item, item.id == newEvent.split && i.start == newEvent.start)"
-                      @click="selectDate(item.id, i)"
+                      :style="slotStyle(item, item.id == newRecord.resource_id && i.start == newRecord.start)"
+                      @click="selectSlot(item.id, i)"
                     >{{ i.start.split(" ")[1] }}–{{ i.end.split(" ")[1] }}</button>
                   </div>
                 </div>
@@ -175,8 +177,8 @@
             </template>
           </ion-content>
         </ion-modal>
-        <!-- Модальное окно события -->
-        <ion-modal class="add-modal" :is-open="showEvent">
+        <!-- Модальное окно записи -->
+        <ion-modal class="add-modal" :is-open="showRecord">
           <ion-header class="add-modal-header ion-no-border">
             <ion-toolbar class="add-modal-toolbar">
               <ion-buttons slot="start">
@@ -194,22 +196,22 @@
               label="Название записи"
               type="text"
               placeholder="Имя клиента или телефон"
-              :model-value="selectedEvent.title"
-              @update:modelValue="selectedEvent.title = $event"
+              :model-value="selectedRecord.title"
+              @update:modelValue="selectedRecord.title = $event"
             />
 
             <div class="form-row">
               <FormInput
                 label="Взрослые"
                 type="number"
-                :model-value="selectedEvent.adult"
-                @update:modelValue="selectedEvent.adult = $event"
+                :model-value="selectedRecord.adult"
+                @update:modelValue="selectedRecord.adult = $event"
               />
               <FormInput
                 label="Детские"
                 type="number"
-                :model-value="selectedEvent.child"
-                @update:modelValue="selectedEvent.child = $event"
+                :model-value="selectedRecord.child"
+                @update:modelValue="selectedRecord.child = $event"
               />
             </div>
 
@@ -218,27 +220,27 @@
               type="number"
               placeholder="0"
               suffix="тг."
-              :model-value="selectedEvent.price"
-              @update:modelValue="selectedEvent.price = $event"
+              :model-value="selectedRecord.price"
+              @update:modelValue="selectedRecord.price = $event"
             />
 
             <FormSelect
-              label="Баня"
-              :model-value="selectedEvent.split"
-              :options="roomOptions"
-              @update:modelValue="selectedEvent.split = $event"
+              label="Объект"
+              :model-value="selectedRecord.resource_id"
+              :options="resourceOptions"
+              @update:modelValue="selectedRecord.resource_id = $event"
             />
 
             <div class="wheel-row">
               <span class="wheel-label">С</span>
-              <ion-datetime v-model="timeStartDate" presentation="date-time" :prefer-wheel="true" minuteValues="0,30"></ion-datetime>
+              <ion-datetime v-model="timeStartDate" presentation="date-time" :prefer-wheel="true" :minute-values="minuteValuesAttr"></ion-datetime>
             </div>
             <div class="wheel-row">
               <span class="wheel-label">До</span>
-              <ion-datetime v-model="timeEndDate" presentation="date-time" :prefer-wheel="true" minuteValues="0,30"></ion-datetime>
+              <ion-datetime v-model="timeEndDate" presentation="date-time" :prefer-wheel="true" :minute-values="minuteValuesAttr"></ion-datetime>
             </div>
 
-            <ion-button expand="block" class="delete-btn" color="danger" @click="deleteEvent">Удалить</ion-button>
+            <ion-button expand="block" class="delete-btn" color="danger" @click="deleteRecord">Удалить</ion-button>
           </ion-content>
         </ion-modal>
       </div>
@@ -251,6 +253,7 @@ import moment from "moment";
 import MonthCalendar from "@/components/MonthCalendar.vue";
 import FormInput from "@/components/FormInput.vue";
 import FormSelect from "@/components/FormSelect.vue";
+import HeaderMenuButton from "@/components/HeaderMenuButton.vue";
 import {
   IonContent,
   IonHeader,
@@ -262,6 +265,9 @@ import {
   IonIcon,
 } from "@ionic/vue";
 import { refreshOutline } from "ionicons/icons";
+import { apiFetch } from "@/services/api";
+import { showAlert, showConfirm } from "@/services/dialogs";
+import { useAuthStore } from "@/stores/auth";
 
 // Business day runs ~9:00 to 3:00 next day, so before 3am still belongs to yesterday's schedule.
 function computeBusinessDay(date) {
@@ -273,7 +279,7 @@ function computeBusinessDay(date) {
 }
 
 export default {
-  name: "HomePage",
+  name: "TimeSlotBookingView",
   components: {
     IonContent,
     IonHeader,
@@ -286,6 +292,12 @@ export default {
     MonthCalendar,
     FormInput,
     FormSelect,
+    HeaderMenuButton,
+  },
+  props: {
+    sectionKey: { type: String, required: true },
+    label: { type: String, required: true },
+    slotStepMinutes: { type: Number, default: 30 },
   },
   data() {
     const now = new Date();
@@ -294,19 +306,13 @@ export default {
       refreshIcon: refreshOutline,
       timeStartDate: null,
       timeEndDate: null,
-      curDate: moment(new Date()).format("DD-MM-YYYY HH:mm"),
-      datePicker: moment(new Date()).format("YYYY-MM-DD"),
       selectedDate: today,
       today,
       now,
-      events: [],
+      records: [],
       slotHeight: 50,
-      splitDays: [
-        { id: 1, color: "#2196f3", label: "Баня 1", class: "split1" },
-        { id: 2, color: "#4caf50", label: "Баня 2", class: "split2" },
-        { id: 3, color: "#ff9800", label: "Баня 3", class: "split3" },
-        { id: 4, color: "#f44336", label: "Баня 4", class: "split4" },
-      ],
+      columnWidth: 90,
+      resources: [],
       durationOptions: [
         { value: 1, label: "На 1 час" },
         { value: 1.5, label: "На 1.5 часа" },
@@ -315,45 +321,34 @@ export default {
         { value: 4, label: "На 4 часа" },
         { value: 0, label: "Свое время" },
       ],
-      minuteOptions: [
-        { value: 0, label: "0" },
-        { value: 0.5, label: "30" },
-      ],
-      roomOptions: [
-        { value: 1, label: "Баня 1" },
-        { value: 2, label: "Баня 2" },
-        { value: 3, label: "Баня 3" },
-        { value: 4, label: "Баня 4" },
-      ],
       isOpen: false,
-      showEvent: false,
-      selectedEvent: null,
-      formatOptions: {
-        date: {
-          weekday: "short",
-          month: "long",
-          day: "2-digit",
-        },
-      },
+      showDateModal: false,
+      showAddDateModal: false,
+      showRecord: false,
+      selectedRecord: null,
       duration: null,
       min_hour: 3,
       max_hour: 27,
-      newEvent: {
+      newRecord: {
         title: '',
         adult: 0,
         child: 0,
-        split: null,
-        class: '',
+        resource_id: null,
         price: null,
         start: '',
         end: ''
       },
       ownHour: null,
       ownMinut: null,
-      classes: ['blue-event', 'green-event', 'orange-event', 'red-event'],
     };
   },
   computed: {
+    canWrite() {
+      return useAuthStore().canWrite;
+    },
+    resourceOptions() {
+      return this.resources.map((r) => ({ value: r.id, label: r.label }));
+    },
     businessStart() {
       return moment(this.selectedDate, "YYYY-MM-DD").startOf("day").add(this.min_hour, "hours");
     },
@@ -398,14 +393,28 @@ export default {
       const minutes = now.diff(start, "minutes");
       return (minutes / 30) * this.slotHeight;
     },
+    minuteSteps() {
+      const steps = [];
+      for (let m = 0; m < 60; m += this.slotStepMinutes) steps.push(m);
+      return steps;
+    },
+    minuteValuesAttr() {
+      return this.minuteSteps.join(",");
+    },
+    minuteOptions() {
+      return this.minuteSteps.map((m) => ({ value: m, label: String(m) }));
+    },
   },
   async mounted() {
-    await this.getEvents();
+    await Promise.all([this.getRecords(), this.loadResources()]);
     this.scrollToCurrentTime();
     this._nowTimer = setInterval(this.updateNow, 60000);
+    this.updateColumnWidth();
+    window.addEventListener('resize', this.updateColumnWidth);
   },
   beforeUnmount() {
     clearInterval(this._nowTimer);
+    window.removeEventListener('resize', this.updateColumnWidth);
   },
   updated() {
     if (this.selectedDate === this.today) {
@@ -416,34 +425,55 @@ export default {
     }
   },
   methods: {
-    async getEvents() {
-        this.events = [];
-        const response = await fetch('http://79.76.52.210:8000/events');
-        const result = await response.json();
+    async loadResources() {
+      this.resources = await apiFetch(`/resources?section=${this.sectionKey}`);
+    },
+    // Fit exactly 4 room columns in the visible width — beyond 4 rooms the
+    // grid scrolls horizontally instead of squeezing every column narrower.
+    updateColumnWidth() {
+      const wrapper = this.$refs.scheduleWrapper;
+      if (!wrapper) return;
+      const available = wrapper.clientWidth - 6 /* padding */ - 30 /* time-col-spacer */;
+      this.columnWidth = Math.max(70, Math.floor(available / 4));
+    },
+    resourceForId(id) {
+      return this.resources.find((r) => r.id === Number(id));
+    },
+    async getRecords() {
+        this.records = [];
+        const result = await apiFetch(`/records?section=${this.sectionKey}`);
         for (const r of result) {
           r.start = r.start.replace("T", " ").slice(0, -3);
           r.end = r.end.replace("T", " ").slice(0, -3);
-          r.class = this.classes[Number(r.split) - 1] || ''
-          this.events.push(r)
+          this.records.push(r)
         }
     },
-    eventsForRoom(roomId) {
+    recordsForResource(resourceId) {
       const start = this.businessStart;
       const end = this.businessEnd;
-      return this.events.filter(e => {
-        if (Number(e.split) !== Number(roomId)) return false;
-        const s = moment(e.start);
+      return this.records.filter(r => {
+        if (Number(r.resource_id) !== Number(resourceId)) return false;
+        const s = moment(r.start);
         return s.isSameOrAfter(start) && s.isBefore(end);
       });
     },
-    eventStyle(event) {
-      const start = moment(event.start);
-      const end = moment(event.end);
+    recordStyle(record) {
+      const start = moment(record.start);
+      const end = moment(record.end);
       const offsetMin = start.diff(this.businessStart, "minutes");
       const durationMin = end.diff(start, "minutes");
       const top = (offsetMin / 30) * this.slotHeight;
       const height = Math.max((durationMin / 30) * this.slotHeight - 6, 34);
       return { top: `${top}px`, height: `${height}px` };
+    },
+    recordCardStyle(record) {
+      const resource = this.resourceForId(record.resource_id);
+      const color = resource ? resource.color : '#9aa0a6';
+      return {
+        ...this.recordStyle(record),
+        backgroundColor: this.hexToRgba(color, 0.16),
+        border: `1.5px solid ${this.hexToRgba(color, 0.55)}`,
+      };
     },
     scrollToCurrentTime () {
       this.$nextTick(() => {
@@ -479,66 +509,50 @@ export default {
     },
     onPickDate(date) {
       this.selectedDate = date;
-      if (this.$refs.dateModal) this.$refs.dateModal.$el.dismiss();
-      if (this.$refs.addDateModal) this.$refs.addDateModal.$el.dismiss();
+      this.showDateModal = false;
+      this.showAddDateModal = false;
     },
     cancel() {
       this.isOpen = false;
-      this.showEvent = false;
+      this.showRecord = false;
       this.duration = null;
       this.ownHour = null;
       this.ownMinut = null;
-      this.newEvent = {
+      this.newRecord = {
         title: '',
         adult: 0,
         child: 0,
-        split: null,
-        class: '',
+        resource_id: null,
         price: null,
         start: '',
         end: ''
       }
     },
     async confirm() {
-        this.newEvent.duration = this.duration;
-        if (this.newEvent.title && this.newEvent.split && this.newEvent.start && this.newEvent.end) {
-          const response = await fetch('http://79.76.52.210:8000/record', {
-            method: 'post',
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify(this.newEvent)
-          });
-          const result = await response.json();
-          alert(result)
-          await this.getEvents();
+        if (this.newRecord.title && this.newRecord.resource_id && this.newRecord.start && this.newRecord.end) {
+          await apiFetch(`/records?section=${this.sectionKey}`, { method: 'POST', body: this.newRecord });
+          await showAlert('Запись добавлена')
+          await this.getRecords();
           this.isOpen = !this.isOpen;
           this.cancel();
         } else {
-          alert('Заполните "Название записи" и "Время"')
+          await showAlert('Заполните "Название записи" и "Время"')
         }
     },
     async confirmEdit() {
-        this.selectedEvent.start = `${this.timeStartDate.split('T')[0]} ${this.timeStartDate.split('T')[1]}`
-        this.selectedEvent.end = `${this.timeEndDate.split('T')[0]} ${this.timeEndDate.split('T')[1]}`
-        const response = await fetch('http://79.76.52.210:8000/events/' + this.selectedEvent.id, {
-          method: 'put',
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(this.selectedEvent)
-        });
-        const result = await response.json();
-        alert(result)
-        await this.getEvents();
-        this.showEvent = false;
+        this.selectedRecord.start = `${this.timeStartDate.split('T')[0]} ${this.timeStartDate.split('T')[1]}`
+        this.selectedRecord.end = `${this.timeEndDate.split('T')[0]} ${this.timeEndDate.split('T')[1]}`
+        await apiFetch(`/records/${this.selectedRecord.id}?section=${this.sectionKey}`, { method: 'PUT', body: this.selectedRecord });
+        await showAlert('Запись обновлена')
+        await this.getRecords();
+        this.showRecord = false;
     },
     setOpen() {
       this.isOpen = !this.isOpen;
     },
-    availableTime(split, duration) {
+    availableTime(resourceId, duration) {
         // Переводим длительность в минуты
-        if (this.ownHour !== null && this.ownMinut !== null) {
+        if (this.ownHour !== null || this.ownMinut !== null) {
             duration = (Number(this.ownHour || 0) * 60) + Number(this.ownMinut || 0);
         } else {
             duration = Number(duration) * 60; // duration в часах
@@ -551,16 +565,16 @@ export default {
         const nowHour = this.now.getHours();
         const nowMin = this.now.getMinutes();
 
-        // Список событий на этот день и split
-        const events = this.events
-            .filter(e => e.split == split && moment(e.start).format("YYYY-MM-DD") === this.selectedDate)
-            .map(e => ({
-                start: new Date(e.start),
-                end: new Date(e.end)
+        // Список записей на этот день и ресурс
+        const records = this.records
+            .filter(r => r.resource_id == resourceId && moment(r.start).format("YYYY-MM-DD") === this.selectedDate)
+            .map(r => ({
+                start: new Date(r.start),
+                end: new Date(r.end)
             }));
 
-        // Проверка пересечения слот → событие
-        const overlaps = (s1, e1) => events.some(ev => s1 < ev.end && ev.start < e1);
+        // Проверка пересечения слот → запись
+        const overlaps = (s1, e1) => records.some(rec => s1 < rec.end && rec.start < e1);
 
         // Формат даты
         const fmt = d => moment(d).format("YYYY-MM-DD HH:mm");
@@ -570,8 +584,8 @@ export default {
         // Идём по рабочим часам
         for (let hour = this.min_hour; hour < this.max_hour; hour++) {
 
-            // Только варианты 00 и 30 минут
-            for (let minute of [0, 30]) {
+            // Варианты минут по шагу раздела (15/30/60)
+            for (let minute of this.minuteSteps) {
 
                 // Пропускаем прошлое время
                 if (isToday) {
@@ -580,14 +594,14 @@ export default {
 
                     const diff = nowTime - slotTime;
 
-                    // если слот в прошлом и больше чем на 30 минут — пропускаем
-                    if (diff > 30) continue;
+                    // если слот в прошлом и больше чем на один шаг — пропускаем
+                    if (diff > this.slotStepMinutes) continue;
                 }
 
                 const start = new Date(year, month, day, hour, minute);
                 const end   = new Date(start.getTime() + duration * 60000);
 
-                // Проверка пересечения с событиями
+                // Проверка пересечения с записями
                 if (!overlaps(start, end)) {
                     times.push({
                         start: fmt(start),
@@ -599,17 +613,7 @@ export default {
 
         return times;
     },
-    getHour(date) {
-        return date.split(' ')[1].split(':')[0]
-    },
-    getDate(date) {
-        const d = date.split(' ')[0].split('-');
-        const year = Number(d[0]);
-        const month = Number(d[1]) - 1;
-        const day = Number(d[2]);
-        return new Date(year, month, day);
-    },
-    showDate(date) {
+    showTime(date) {
         return moment(date).format("HH:mm");
     },
     hexToRgba(hex, alpha) {
@@ -626,40 +630,34 @@ export default {
       }
       return { background: this.hexToRgba(item.color, 0.15), color: item.color };
     },
-    selectDate(split, date) {
-        const classes = ['blue-event', 'green-event', 'orange-event', 'red-event']
-        const newItem = {...this.newEvent, split: split, start: date.start, end: date.end, class: classes[split - 1]}
-        if (newItem.start == this.newEvent.start) {
-          this.newEvent.start = ''
+    selectSlot(resourceId, date) {
+        const newItem = {...this.newRecord, resource_id: resourceId, start: date.start, end: date.end}
+        if (newItem.start == this.newRecord.start) {
+          this.newRecord.start = ''
         } else {
-          this.newEvent = newItem;
+          this.newRecord = newItem;
         }
     },
-    onEventClick(event) {
-        this.selectedEvent = this.events.find(item => item.id == event.id);
-        this.timeStartDate = `${this.selectedEvent.start.split(' ')[0]}T${this.selectedEvent.start.split(' ')[1]}`
-        this.timeEndDate = `${this.selectedEvent.end.split(' ')[0]}T${this.selectedEvent.end.split(' ')[1]}`
-        if (this.selectedEvent) {
-            this.showEvent = true;
+    onRecordClick(record) {
+        if (!this.canWrite) return;
+        this.selectedRecord = this.records.find(item => item.id == record.id);
+        this.timeStartDate = `${this.selectedRecord.start.split(' ')[0]}T${this.selectedRecord.start.split(' ')[1]}`
+        this.timeEndDate = `${this.selectedRecord.end.split(' ')[0]}T${this.selectedRecord.end.split(' ')[1]}`
+        if (this.selectedRecord) {
+            this.showRecord = true;
         }
     },
-    async deleteEvent() {
-      const apply = confirm('Вы точно хотите удалить запись?')
+    async deleteRecord() {
+      const apply = await showConfirm('Вы точно хотите удалить запись?', { header: 'Удаление', confirmText: 'Удалить' })
       if (apply) {
-        const response = await fetch('http://79.76.52.210:8000/events/' + this.selectedEvent.id, {
-          method: 'delete',
-          headers: {
-            "Content-Type": "application/json"
-          }
-        });
-        const result = await response.json();
-        alert(result)
-        await this.getEvents();
-        this.showEvent = false;
+        await apiFetch(`/records/${this.selectedRecord.id}?section=${this.sectionKey}`, { method: 'DELETE' });
+        await showAlert('Запись удалена')
+        await this.getRecords();
+        this.showRecord = false;
       }
     },
-    isLateNight(event) {
-      const end = new Date(event.end); // убедимся, что это Date
+    isLateNight(record) {
+      const end = new Date(record.end);
       const hour = end.getHours();
       const minute = end.getMinutes();
       return hour === 0 && minute === 30;
@@ -789,20 +787,35 @@ ion-page {
   border-radius: 18px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
   padding: 10px 3px 8px 3px;
+  overflow: hidden;
+}
+
+.schedule-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .room-headers {
   display: flex;
+  width: max-content;
+  min-width: 100%;
 }
 
 .time-col-spacer {
   width: 30px;
   flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #fff;
 }
 
 .room-header {
-  flex: 1;
-  min-width: 0;
+  flex-shrink: 0;
+  margin: 0 2px;
   text-align: center;
   font-size: 0.8rem;
   font-weight: 700;
@@ -826,10 +839,16 @@ ion-page {
   overflow-y: auto;
   display: flex;
   position: relative;
+  width: max-content;
+  min-width: 100%;
 }
 
 .time-col {
   flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
 }
 
 .time-label {
@@ -841,17 +860,12 @@ ion-page {
 }
 
 .room-col {
-  flex: 1;
+  flex-shrink: 0;
   min-width: 0;
   position: relative;
   margin: 0 2px;
   border-radius: 14px;
 }
-
-.room-col.split1 { background-color: rgba(33, 150, 243, 0.10); }
-.room-col.split2 { background-color: rgba(76, 175, 80, 0.10); }
-.room-col.split3 { background-color: rgba(255, 152, 0, 0.10); }
-.room-col.split4 { background-color: rgba(244, 67, 54, 0.10); }
 
 .now-line {
   position: absolute;
@@ -910,11 +924,6 @@ ion-page {
   text-overflow: ellipsis;
 }
 .event-price { font-weight: 700; font-size: 0.72rem; }
-
-.event-card.blue-event   { background-color: rgba(33, 150, 243, 0.16); border: 1.5px solid rgba(33, 150, 243, 0.55); }
-.event-card.green-event  { background-color: rgba(76, 175, 80, 0.16); border: 1.5px solid rgba(76, 175, 80, 0.55); }
-.event-card.orange-event { background-color: rgba(255, 152, 0, 0.16); border: 1.5px solid rgba(255, 152, 0, 0.55); }
-.event-card.red-event    { background-color: rgba(244, 67, 54, 0.16); border: 1.5px solid rgba(244, 67, 54, 0.55); }
 
 .add-modal {
   --border-radius: 20px;

@@ -1,8 +1,8 @@
 <template>
   <div class="ff">
     <label v-if="label" class="ff-label">{{ label }}</label>
-    <div class="ff-wrap" :class="{ open: isOpen }">
-      <button type="button" class="ff-trigger" @click="toggle">
+    <div class="ff-wrap" :class="{ open: isOpen, 'open-up': openUpward }">
+      <button ref="trigger" type="button" class="ff-trigger" @click="toggle">
         <span :class="{ 'ff-placeholder': !selectedLabel }">{{ selectedLabel || placeholder }}</span>
         <span class="ff-arrow">▾</span>
       </button>
@@ -44,6 +44,7 @@ export default {
   data() {
     return {
       isOpen: false,
+      openUpward: false,
     };
   },
   computed: {
@@ -60,7 +61,19 @@ export default {
   },
   methods: {
     toggle() {
+      if (!this.isOpen) {
+        this.openUpward = this.shouldOpenUpward();
+      }
       this.isOpen = !this.isOpen;
+    },
+    shouldOpenUpward() {
+      const trigger = this.$refs.trigger;
+      if (!trigger) return false;
+      const rect = trigger.getBoundingClientRect();
+      const estimatedHeight = Math.min(260, this.options.length * 44 + 8);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      return spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
     },
     select(value) {
       this.$emit("update:modelValue", value);
@@ -144,6 +157,18 @@ export default {
   max-height: 260px;
   overflow-y: auto;
   z-index: 30;
+}
+
+/* When there isn't enough room below the trigger (e.g. near the bottom of a
+   long scrollable page), open upward instead of getting clipped off-screen. */
+.ff-wrap.open-up .ff-trigger {
+  border-radius: 0 0 14px 14px;
+}
+
+.ff-wrap.open-up .ff-dropdown {
+  top: auto;
+  bottom: 100%;
+  border-radius: 14px 14px 0 0;
 }
 
 .ff-option {

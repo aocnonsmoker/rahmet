@@ -4,52 +4,53 @@
       <ion-toolbar class="hotel-toolbar">
         <div class="header-card">
           <button class="header-btn today" type="button" @click="goToday">Сегодня</button>
-          <div class="header-title">Гостиница</div>
-          <button class="header-btn refresh" type="button" @click="getEvents">
+          <div class="header-title">{{ label }}</div>
+          <button class="header-btn refresh" type="button" @click="getRecords">
             <ion-icon :icon="refreshIcon"></ion-icon>
             Обновить
           </button>
+          <HeaderMenuButton />
         </div>
       </ion-toolbar>
     </ion-header>
 
     <ion-content :scroll-y="true">
       <div class="page-root">
-        <ion-button expand="block" class="add-btn" @click="setOpen(true)">+ Добавить запись</ion-button>
+        <ion-button v-if="canWrite" expand="block" class="add-btn" @click="setOpen(true)">+ Добавить запись</ion-button>
 
         <div class="date-nav">
           <button class="nav-arrow" type="button" @click="prevDay">‹</button>
-          <button id="hotel-date-trigger" class="date-pill" type="button">{{ formattedDate }}</button>
+          <button class="date-pill" type="button" @click="showDateModal = true">{{ formattedDate }}</button>
           <button class="nav-arrow" type="button" @click="nextDay">›</button>
         </div>
-        <ion-modal :keep-contents-mounted="true" trigger="hotel-date-trigger" ref="dateModal">
+        <ion-modal :keep-contents-mounted="true" :is-open="showDateModal" @didDismiss="showDateModal = false">
           <MonthCalendar
             :model-value="selectedDate"
-            :events="events"
+            :events="records"
             @update:modelValue="onPickDate"
           />
         </ion-modal>
 
-        <!-- Rooms list -->
+        <!-- Список ресурсов -->
         <div class="rooms-list">
           <div
-            v-for="room in splitDays"
-            :key="room.id"
+            v-for="resource in resources"
+            :key="resource.id"
             class="room-pill"
-            :style="{ background: hexToRgba(room.color, 0.12) }"
+            :style="{ background: hexToRgba(resource.color, 0.12) }"
           >
-            <div class="room-title" :style="{ color: room.color }">{{ room.label }}</div>
-            <div v-if="getEventsForRoom(room.id).length" class="room-events">
+            <div class="room-title" :style="{ color: resource.color }">{{ resource.label }}</div>
+            <div v-if="recordsForResource(resource.id).length" class="room-events">
               <div
-                v-for="event in getEventsForRoom(room.id)"
-                :key="event.id"
+                v-for="record in recordsForResource(resource.id)"
+                :key="record.id"
                 class="room-event"
-                :style="{ background: hexToRgba(room.color, 0.22), borderColor: hexToRgba(room.color, 0.55) }"
-                @click="onEventClick(event)"
+                :style="{ background: hexToRgba(resource.color, 0.22), borderColor: hexToRgba(resource.color, 0.55) }"
+                @click="onRecordClick(record)"
               >
-                <div class="event-title" v-html="event.title"></div>
-                <div class="event-dates">{{ showDate(event.start) }} – {{ showDate(event.end) }}</div>
-                <div v-if="event.price" class="event-price">{{ event.price }} тг.</div>
+                <div class="event-title" v-html="record.title"></div>
+                <div class="event-dates">{{ showDate(record.start) }} – {{ showDate(record.end) }}</div>
+                <div v-if="record.price" class="event-price">{{ record.price }} тг.</div>
               </div>
             </div>
           </div>
@@ -72,44 +73,44 @@
               label="Название записи"
               type="text"
               placeholder="Имя клиента или телефон"
-              :model-value="newEvent.title"
-              @update:modelValue="newEvent.title = $event"
+              :model-value="newRecord.title"
+              @update:modelValue="newRecord.title = $event"
             />
             <FormInput
               label="Сумма"
               type="number"
               suffix="тг."
-              :model-value="newEvent.price"
-              @update:modelValue="newEvent.price = $event"
+              :model-value="newRecord.price"
+              @update:modelValue="newRecord.price = $event"
             />
             <FormSelect
-              label="Номер"
-              placeholder="Выберите номер"
-              :model-value="newEvent.split"
-              :options="roomOptions"
-              @update:modelValue="newEvent.split = $event"
+              label="Объект"
+              placeholder="Выберите объект"
+              :model-value="newRecord.resource_id"
+              :options="resourceOptions"
+              @update:modelValue="newRecord.resource_id = $event"
             />
 
             <div class="date-field">
-              <label class="date-field-label">Заезд</label>
-              <button id="hotel-add-start-trigger" class="date-field-btn" type="button">{{ formatShort(newEvent.start) }}</button>
+              <label class="date-field-label">С</label>
+              <button class="date-field-btn" type="button" @click="showAddStartModal = true">{{ formatShort(newRecord.start) }}</button>
             </div>
-            <ion-modal :keep-contents-mounted="true" trigger="hotel-add-start-trigger" ref="addStartModal">
-              <MonthCalendar :model-value="newEvent.start || today" :events="events" @update:modelValue="onPickStart" />
+            <ion-modal :keep-contents-mounted="true" :is-open="showAddStartModal" @didDismiss="showAddStartModal = false">
+              <MonthCalendar :model-value="newRecord.start || today" :events="records" @update:modelValue="onPickStart" />
             </ion-modal>
 
             <div class="date-field">
-              <label class="date-field-label">Выезд</label>
-              <button id="hotel-add-end-trigger" class="date-field-btn" type="button">{{ formatShort(newEvent.end) }}</button>
+              <label class="date-field-label">По</label>
+              <button class="date-field-btn" type="button" @click="showAddEndModal = true">{{ formatShort(newRecord.end) }}</button>
             </div>
-            <ion-modal :keep-contents-mounted="true" trigger="hotel-add-end-trigger" ref="addEndModal">
-              <MonthCalendar :model-value="newEvent.end || today" :events="events" @update:modelValue="onPickEnd" />
+            <ion-modal :keep-contents-mounted="true" :is-open="showAddEndModal" @didDismiss="showAddEndModal = false">
+              <MonthCalendar :model-value="newRecord.end || today" :events="records" @update:modelValue="onPickEnd" />
             </ion-modal>
           </ion-content>
         </ion-modal>
 
-        <!-- Модальное окно события -->
-        <ion-modal class="hotel-modal" :is-open="showEvent">
+        <!-- Модальное окно записи -->
+        <ion-modal class="hotel-modal" :is-open="showRecord">
           <ion-header class="hotel-modal-header ion-no-border">
             <ion-toolbar class="hotel-modal-toolbar">
               <ion-buttons slot="start">
@@ -122,46 +123,46 @@
           </ion-header>
           <ion-content class="ion-padding">
             <FormInput
-              v-if="selectedEvent"
+              v-if="selectedRecord"
               label="Название записи"
               type="text"
               placeholder="Имя клиента или телефон"
-              :model-value="selectedEvent.title"
-              @update:modelValue="selectedEvent.title = $event"
+              :model-value="selectedRecord.title"
+              @update:modelValue="selectedRecord.title = $event"
             />
             <FormInput
-              v-if="selectedEvent"
+              v-if="selectedRecord"
               label="Сумма"
               type="number"
               suffix="тг."
-              :model-value="selectedEvent.price"
-              @update:modelValue="selectedEvent.price = $event"
+              :model-value="selectedRecord.price"
+              @update:modelValue="selectedRecord.price = $event"
             />
             <FormSelect
-              v-if="selectedEvent"
-              label="Номер"
-              :model-value="selectedEvent.split"
-              :options="roomOptions"
-              @update:modelValue="selectedEvent.split = $event"
+              v-if="selectedRecord"
+              label="Объект"
+              :model-value="selectedRecord.resource_id"
+              :options="resourceOptions"
+              @update:modelValue="selectedRecord.resource_id = $event"
             />
 
             <div class="date-field">
               <label class="date-field-label">Заезд</label>
-              <button id="hotel-edit-start-trigger" class="date-field-btn" type="button">{{ formatShort(timeStartDate) }}</button>
+              <button class="date-field-btn" type="button" @click="showEditStartModal = true">{{ formatShort(timeStartDate) }}</button>
             </div>
-            <ion-modal :keep-contents-mounted="true" trigger="hotel-edit-start-trigger" ref="editStartModal">
-              <MonthCalendar :model-value="timeStartDate" :events="events" @update:modelValue="onPickEditStart" />
+            <ion-modal :keep-contents-mounted="true" :is-open="showEditStartModal" @didDismiss="showEditStartModal = false">
+              <MonthCalendar :model-value="timeStartDate" :events="records" @update:modelValue="onPickEditStart" />
             </ion-modal>
 
             <div class="date-field">
               <label class="date-field-label">Выезд</label>
-              <button id="hotel-edit-end-trigger" class="date-field-btn" type="button">{{ formatShort(timeEndDate) }}</button>
+              <button class="date-field-btn" type="button" @click="showEditEndModal = true">{{ formatShort(timeEndDate) }}</button>
             </div>
-            <ion-modal :keep-contents-mounted="true" trigger="hotel-edit-end-trigger" ref="editEndModal">
-              <MonthCalendar :model-value="timeEndDate" :events="events" @update:modelValue="onPickEditEnd" />
+            <ion-modal :keep-contents-mounted="true" :is-open="showEditEndModal" @didDismiss="showEditEndModal = false">
+              <MonthCalendar :model-value="timeEndDate" :events="records" @update:modelValue="onPickEditEnd" />
             </ion-modal>
 
-            <ion-button expand="block" class="delete-btn" color="danger" @click="deleteEvent">Удалить</ion-button>
+            <ion-button expand="block" class="delete-btn" color="danger" @click="deleteRecord">Удалить</ion-button>
           </ion-content>
         </ion-modal>
       </div>
@@ -174,6 +175,10 @@ import moment from "moment";
 import MonthCalendar from "@/components/MonthCalendar.vue";
 import FormInput from "@/components/FormInput.vue";
 import FormSelect from "@/components/FormSelect.vue";
+import HeaderMenuButton from "@/components/HeaderMenuButton.vue";
+import { apiFetch } from "@/services/api";
+import { showAlert, showConfirm } from "@/services/dialogs";
+import { useAuthStore } from "@/stores/auth";
 import {
   IonContent,
   IonHeader,
@@ -186,7 +191,7 @@ import {
 import { refreshOutline } from "ionicons/icons";
 
 export default {
-  name: "HotelPage",
+  name: "DateRangeBookingView",
   components: {
     IonContent,
     IonHeader,
@@ -198,6 +203,11 @@ export default {
     MonthCalendar,
     FormInput,
     FormSelect,
+    HeaderMenuButton,
+  },
+  props: {
+    sectionKey: { type: String, required: true },
+    label: { type: String, required: true },
   },
   data() {
     return {
@@ -206,38 +216,31 @@ export default {
       timeEndDate: null,
       selectedDate: moment().format("YYYY-MM-DD"),
       today: moment().format("YYYY-MM-DD"),
-      events: [],
-      splitDays: [
-        { id: 1,  color: "#2196f3", label: "Номер 1" },
-        { id: 2,  color: "#4caf50", label: "Номер 2" },
-        { id: 3,  color: "#ff9800", label: "Номер 3" },
-        { id: 4,  color: "#f44336", label: "Номер 4" },
-        { id: 5,  color: "#9c27b0", label: "Номер 5" },
-        { id: 6,  color: "#009688", label: "Номер 6" },
-        { id: 7,  color: "#795548", label: "Номер 7" },
-        { id: 8,  color: "#3f51b5", label: "Номер 8" },
-        { id: 9,  color: "#827717", label: "Номер 9" },
-        { id: 10, color: "#d32f2f", label: "Номер 10" },
-      ],
+      records: [],
+      resources: [],
       isOpen: false,
-      showEvent: false,
-      selectedEvent: null,
-      newEvent: {
+      showDateModal: false,
+      showAddStartModal: false,
+      showAddEndModal: false,
+      showEditStartModal: false,
+      showEditEndModal: false,
+      showRecord: false,
+      selectedRecord: null,
+      newRecord: {
         title: '',
-        adult: null,
-        child: null,
-        split: null,
-        class: '',
+        resource_id: null,
         price: null,
         start: '',
         end: '',
       },
-      classes: ['blue-event', 'green-event', 'orange-event', 'red-event', 'purple-event', 'teal-event', 'brown-event', 'navy-event', 'olive-event', 'crimson-event'],
     };
   },
   computed: {
-    roomOptions() {
-      return this.splitDays.map((room) => ({ value: room.id, label: room.label }));
+    canWrite() {
+      return useAuthStore().canWrite;
+    },
+    resourceOptions() {
+      return this.resources.map((r) => ({ value: r.id, label: r.label }));
     },
     formattedDate() {
       const date = new Date(`${this.selectedDate}T00:00:00`);
@@ -251,9 +254,12 @@ export default {
     },
   },
   async mounted() {
-    await this.getEvents();
+    await Promise.all([this.getRecords(), this.loadResources()]);
   },
   methods: {
+    async loadResources() {
+      this.resources = await apiFetch(`/resources?section=${this.sectionKey}`);
+    },
     hexToRgba(hex, alpha) {
       const h = hex.replace('#', '');
       const bigint = parseInt(h, 16);
@@ -284,132 +290,113 @@ export default {
     },
     onPickDate(date) {
       this.selectedDate = date;
-      if (this.$refs.dateModal) this.$refs.dateModal.$el.dismiss();
+      this.showDateModal = false;
     },
     onPickStart(date) {
-      this.newEvent.start = date;
-      this.newEvent.end = moment(date).add(1, 'days').format('YYYY-MM-DD');
-      if (this.$refs.addStartModal) this.$refs.addStartModal.$el.dismiss();
+      this.newRecord.start = date;
+      this.newRecord.end = moment(date).add(1, 'days').format('YYYY-MM-DD');
+      this.showAddStartModal = false;
     },
     onPickEnd(date) {
-      this.newEvent.end = date;
-      if (this.$refs.addEndModal) this.$refs.addEndModal.$el.dismiss();
+      this.newRecord.end = date;
+      this.showAddEndModal = false;
     },
     onPickEditStart(date) {
       this.timeStartDate = date;
-      if (this.$refs.editStartModal) this.$refs.editStartModal.$el.dismiss();
+      this.showEditStartModal = false;
     },
     onPickEditEnd(date) {
       this.timeEndDate = date;
-      if (this.$refs.editEndModal) this.$refs.editEndModal.$el.dismiss();
+      this.showEditEndModal = false;
     },
-    getEventsForRoom(roomId) {
-      return this.events.filter(e => {
-        const start = e.start.split(' ')[0];
-        const end = e.end.split(' ')[0];
-        return e.split === roomId && this.selectedDate >= start && this.selectedDate < end;
+    recordsForResource(resourceId) {
+      return this.records.filter(r => {
+        const start = r.start.split(' ')[0];
+        const end = r.end.split(' ')[0];
+        return r.resource_id === resourceId && this.selectedDate >= start && this.selectedDate < end;
       });
     },
-    async getEvents() {
-      this.events = [];
-      const response = await fetch('http://79.76.52.210:8000/hotel');
-      const result = await response.json();
+    async getRecords() {
+      this.records = [];
+      const result = await apiFetch(`/records?section=${this.sectionKey}`);
       for (const r of result) {
         r.start = r.start.replace("T", " ").slice(0, -3);
         r.end = r.end.replace("T", " ").slice(0, -3);
-        r.class = this.classes[Number(r.split) - 1] || '';
-        this.events.push(r);
+        this.records.push(r);
       }
     },
     cancel() {
       this.isOpen = false;
-      this.showEvent = false;
-      this.newEvent = {
+      this.showRecord = false;
+      this.newRecord = {
         title: '',
-        adult: null,
-        child: null,
-        split: null,
-        class: '',
+        resource_id: null,
         price: null,
         start: '',
         end: '',
       };
     },
-    isRoomBusy(split, start, end, excludeId = null) {
-      return this.events.some(e => {
-        if (e.split !== Number(split)) return false;
-        if (excludeId && e.id === excludeId) return false;
-        const eStart = e.start.split(' ')[0];
-        const eEnd = e.end.split(' ')[0];
-        return start < eEnd && eStart < end;
+    isResourceBusy(resourceId, start, end, excludeId = null) {
+      return this.records.some(r => {
+        if (r.resource_id !== Number(resourceId)) return false;
+        if (excludeId && r.id === excludeId) return false;
+        const rStart = r.start.split(' ')[0];
+        const rEnd = r.end.split(' ')[0];
+        return start < rEnd && rStart < end;
       });
     },
     async confirm() {
-      if (this.newEvent.title && this.newEvent.split && this.newEvent.start && this.newEvent.end) {
-        const start = this.newEvent.start.split('T')[0];
-        const end = this.newEvent.end.split('T')[0];
-        if (this.isRoomBusy(this.newEvent.split, start, end)) {
-          alert('Эти даты уже заняты для выбранного номера');
+      if (this.newRecord.title && this.newRecord.resource_id && this.newRecord.start && this.newRecord.end) {
+        const start = this.newRecord.start.split('T')[0];
+        const end = this.newRecord.end.split('T')[0];
+        if (this.isResourceBusy(this.newRecord.resource_id, start, end)) {
+          await showAlert('Эти даты уже заняты для выбранного объекта');
           return;
         }
-        this.newEvent.class = this.classes[Number(this.newEvent.split) - 1] || '';
-        const response = await fetch('http://79.76.52.210:8000/record-hotel', {
-          method: 'post',
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(this.newEvent),
-        });
-        const result = await response.json();
-        alert(result);
-        await this.getEvents();
+        await apiFetch(`/records?section=${this.sectionKey}`, { method: 'POST', body: this.newRecord });
+        await showAlert('Запись добавлена');
+        await this.getRecords();
         this.cancel();
       } else {
-        alert('Заполните "Название записи", "Номер" и "Даты"');
+        await showAlert('Заполните "Название записи", "Объект" и "Даты"');
       }
     },
     async confirmEdit() {
-      this.selectedEvent.start = this.timeStartDate.split('T')[0];
-      this.selectedEvent.end = this.timeEndDate.split('T')[0];
-      if (this.isRoomBusy(this.selectedEvent.split, this.selectedEvent.start, this.selectedEvent.end, this.selectedEvent.id)) {
-        alert('Эти даты уже заняты для выбранного номера');
+      this.selectedRecord.start = this.timeStartDate.split('T')[0];
+      this.selectedRecord.end = this.timeEndDate.split('T')[0];
+      if (this.isResourceBusy(this.selectedRecord.resource_id, this.selectedRecord.start, this.selectedRecord.end, this.selectedRecord.id)) {
+        await showAlert('Эти даты уже заняты для выбранного объекта');
         return;
       }
-      const response = await fetch('http://79.76.52.210:8000/hotel/' + this.selectedEvent.id, {
-        method: 'put',
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(this.selectedEvent),
-      });
-      const result = await response.json();
-      alert(result);
-      await this.getEvents();
-      this.showEvent = false;
+      await apiFetch(`/records/${this.selectedRecord.id}?section=${this.sectionKey}`, { method: 'PUT', body: this.selectedRecord });
+      await showAlert('Запись обновлена');
+      await this.getRecords();
+      this.showRecord = false;
     },
     setOpen() {
-      this.newEvent.start = this.selectedDate;
-      this.newEvent.end = moment(this.selectedDate).add(1, 'days').format('YYYY-MM-DD');
+      this.newRecord.start = this.selectedDate;
+      this.newRecord.end = moment(this.selectedDate).add(1, 'days').format('YYYY-MM-DD');
       this.isOpen = true;
     },
     showDate(date) {
       return moment(date).format("DD.MM");
     },
-    onEventClick(event) {
-      this.selectedEvent = this.events.find(item => item.id == event.id);
-      this.timeStartDate = this.selectedEvent.start.split(' ')[0];
-      this.timeEndDate = this.selectedEvent.end.split(' ')[0];
-      if (this.selectedEvent) {
-        this.showEvent = true;
+    onRecordClick(record) {
+      if (!this.canWrite) return;
+      this.selectedRecord = this.records.find(item => item.id == record.id);
+      this.timeStartDate = this.selectedRecord.start.split(' ')[0];
+      this.timeEndDate = this.selectedRecord.end.split(' ')[0];
+      if (this.selectedRecord) {
+        this.showRecord = true;
       }
     },
-    async deleteEvent() {
-      const apply = confirm('Вы точно хотите удалить запись?');
+    async deleteRecord() {
+      const apply = await showConfirm('Вы точно хотите удалить запись?', { header: 'Удаление', confirmText: 'Удалить' });
       if (apply) {
-        const response = await fetch('http://79.76.52.210:8000/hotel/' + this.selectedEvent.id, {
-          method: 'delete',
-          headers: { "Content-Type": "application/json" },
-        });
-        const result = await response.json();
-        alert(result);
-        await this.getEvents();
-        this.showEvent = false;
+        await apiFetch(`/records/${this.selectedRecord.id}?section=${this.sectionKey}`, { method: 'DELETE' });
+        await showAlert('Запись удалена');
+        await this.getRecords();
+        this.showRecord = false;
       }
     },
   },
