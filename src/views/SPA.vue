@@ -248,6 +248,7 @@
 
 <script>
 import moment from "moment";
+import { layoutOverlaps } from "@/utils/eventLayout";
 import MonthCalendar from "@/components/MonthCalendar.vue";
 import FormInput from "@/components/FormInput.vue";
 import FormSelect from "@/components/FormSelect.vue";
@@ -443,7 +444,16 @@ export default {
       const durationMin = end.diff(start, "minutes");
       const top = (offsetMin / 30) * this.slotHeight;
       const height = Math.max((durationMin / 30) * this.slotHeight - 6, 34);
-      return { top: `${top}px`, height: `${height}px` };
+      const layout = layoutOverlaps(this.eventsForRoom(event.split));
+      const { col, cols } = layout.get(event.id) || { col: 0, cols: 1 };
+      const widthPct = 100 / cols;
+      return {
+        top: `${top}px`,
+        height: `${height}px`,
+        left: `calc(${col * widthPct}% + 2px)`,
+        right: 'auto',
+        width: `calc(${widthPct}% - 4px)`,
+      };
     },
     scrollToCurrentTime () {
       this.$nextTick(() => {
