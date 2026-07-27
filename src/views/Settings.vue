@@ -100,7 +100,10 @@
                 <div class="resource-list">
                   <div v-for="r in resources" :key="r.id" class="resource-row" :style="{ borderColor: r.color }">
                     <span class="resource-color" :style="{ background: r.color }"></span>
-                    <div class="resource-row-label">{{ r.label }}</div>
+                    <div class="resource-row-label">
+                      {{ r.label }}
+                      <span v-if="editingSection.template === 'club' && r.trainer_id" class="resource-row-sub">{{ trainerLabel(r.trainer_id) }}</span>
+                    </div>
                     <div class="section-actions">
                       <button class="icon-btn edit" type="button" @click="openEditResource(r)">Изменить</button>
                       <button class="icon-btn danger" type="button" @click="removeResource(r)">Удалить</button>
@@ -108,6 +111,23 @@
                   </div>
                 </div>
                 <button class="add-section-btn" type="button" @click="openAddResource">+ Добавить</button>
+              </template>
+
+              <template v-if="editingSection.template === 'club'">
+                <div class="icon-field-label" style="margin-top: 16px;">Тренеры</div>
+                <div class="resource-list">
+                  <div v-for="t in trainers" :key="t.id" class="resource-row">
+                    <div class="resource-row-label">
+                      {{ t.full_name }}
+                      <span v-if="t.phone" class="resource-row-sub">{{ t.phone }}</span>
+                    </div>
+                    <div class="section-actions">
+                      <button class="icon-btn edit" type="button" @click="openEditTrainer(t)">Изменить</button>
+                      <button class="icon-btn danger" type="button" @click="removeTrainer(t)">Удалить</button>
+                    </div>
+                  </div>
+                </div>
+                <button class="add-section-btn" type="button" @click="openAddTrainer">+ Добавить тренера</button>
               </template>
             </template>
           </ion-content>
@@ -211,6 +231,14 @@
                   @click="editingResource.color = c"
                 ></button>
               </div>
+              <FormSelect
+                v-if="editingSection.template === 'club'"
+                label="Тренер"
+                placeholder="Не назначен"
+                :model-value="editingResource.trainer_id"
+                :options="trainerOptions"
+                @update:modelValue="editingResource.trainer_id = $event"
+              />
             </template>
           </ion-content>
         </ion-modal>
@@ -249,6 +277,76 @@
                 @click="newResource.color = c"
               ></button>
             </div>
+            <FormSelect
+              v-if="editingSection && editingSection.template === 'club'"
+              label="Тренер"
+              placeholder="Не назначен"
+              :model-value="newResource.trainer_id"
+              :options="trainerOptions"
+              @update:modelValue="newResource.trainer_id = $event"
+            />
+          </ion-content>
+        </ion-modal>
+
+        <!-- Модальное окно редактирования тренера -->
+        <ion-modal class="section-modal" :is-open="showEditTrainer">
+          <ion-header class="section-modal-header ion-no-border">
+            <ion-toolbar class="section-modal-toolbar">
+              <ion-buttons slot="start">
+                <ion-button fill="clear" color="medium" @click="showEditTrainer = false">Отменить</ion-button>
+              </ion-buttons>
+              <ion-buttons slot="end">
+                <ion-button fill="clear" color="primary" :strong="true" :disabled="savingTrainer" @click="saveTrainerEdit">
+                  {{ savingTrainer ? 'Сохраняем…' : 'Сохранить' }}
+                </ion-button>
+              </ion-buttons>
+            </ion-toolbar>
+          </ion-header>
+          <ion-content class="ion-padding">
+            <template v-if="editingTrainer">
+              <FormInput
+                label="ФИО"
+                type="text"
+                :model-value="editingTrainer.full_name"
+                @update:modelValue="editingTrainer.full_name = $event"
+              />
+              <FormInput
+                label="Телефон"
+                type="tel"
+                :model-value="editingTrainer.phone"
+                @update:modelValue="editingTrainer.phone = $event"
+              />
+            </template>
+          </ion-content>
+        </ion-modal>
+
+        <!-- Модальное окно добавления тренера -->
+        <ion-modal class="section-modal" :is-open="showAddTrainer">
+          <ion-header class="section-modal-header ion-no-border">
+            <ion-toolbar class="section-modal-toolbar">
+              <ion-buttons slot="start">
+                <ion-button fill="clear" color="medium" @click="showAddTrainer = false">Отменить</ion-button>
+              </ion-buttons>
+              <ion-buttons slot="end">
+                <ion-button fill="clear" color="primary" :strong="true" :disabled="creatingTrainer" @click="addTrainer">
+                  {{ creatingTrainer ? 'Создаём…' : 'Добавить' }}
+                </ion-button>
+              </ion-buttons>
+            </ion-toolbar>
+          </ion-header>
+          <ion-content class="ion-padding">
+            <FormInput
+              label="ФИО"
+              type="text"
+              :model-value="newTrainer.full_name"
+              @update:modelValue="newTrainer.full_name = $event"
+            />
+            <FormInput
+              label="Телефон"
+              type="tel"
+              :model-value="newTrainer.phone"
+              @update:modelValue="newTrainer.phone = $event"
+            />
           </ion-content>
         </ion-modal>
 
@@ -350,6 +448,7 @@ const TEMPLATE_LABELS = {
   time_slot: 'Бронь по времени',
   date_range: 'Бронь по датам',
   queue: 'Очередь',
+  club: 'Спортивная секция',
 };
 
 const ICON_CHOICES = [
@@ -392,8 +491,16 @@ export default {
       savingResource: false,
 
       showAddResource: false,
-      newResource: { label: '', color: '#2196f3' },
+      newResource: { label: '', color: '#2196f3', trainer_id: null },
       creatingResources: false,
+
+      trainers: [],
+      showEditTrainer: false,
+      editingTrainer: null,
+      savingTrainer: false,
+      showAddTrainer: false,
+      newTrainer: { full_name: '', phone: '' },
+      creatingTrainer: false,
 
       staff: [],
       showAddStaff: false,
@@ -423,6 +530,7 @@ export default {
         { value: 'time_slot', label: 'Бронь по времени' },
         { value: 'date_range', label: 'Бронь по датам' },
         { value: 'queue', label: 'Очередь' },
+        { value: 'club', label: 'Спортивная секция' },
       ];
     },
     slotStepOptions() {
@@ -438,6 +546,9 @@ export default {
         { value: 'single', label: 'Одно поле' },
         { value: 'split', label: 'Взрослые и детские' },
       ];
+    },
+    trainerOptions() {
+      return this.trainers.map((t) => ({ value: t.id, label: t.full_name }));
     },
     enabledSectionKeys() {
       return this.sectionsList.filter((s) => s.enabled).map((s) => s.key);
@@ -478,6 +589,9 @@ export default {
       if (s.template !== 'queue') {
         this.resourceSection = s.key;
         await this.loadResources();
+      }
+      if (s.template === 'club') {
+        await this.loadTrainers();
       }
     },
     async saveSectionEdit() {
@@ -551,10 +665,11 @@ export default {
     async saveResourceEdit() {
       this.savingResource = true;
       try {
-        await apiFetch(`/resources/${this.editingResource.id}`, {
-          method: 'PUT',
-          body: { label: this.editingResource.label, color: this.editingResource.color },
-        });
+        const body = { label: this.editingResource.label, color: this.editingResource.color };
+        if (this.editingSection.template === 'club') {
+          body.trainer_id = this.editingResource.trainer_id;
+        }
+        await apiFetch(`/resources/${this.editingResource.id}`, { method: 'PUT', body });
         this.showEditResource = false;
         await this.loadResources();
       } finally {
@@ -568,7 +683,7 @@ export default {
       this.resources = this.resources.filter((x) => x.id !== r.id);
     },
     openAddResource() {
-      this.newResource = { label: '', color: '#2196f3' };
+      this.newResource = { label: '', color: '#2196f3', trainer_id: null };
       this.showAddResource = true;
     },
     async addResources() {
@@ -581,12 +696,73 @@ export default {
       try {
         const created = await apiFetch('/resources', {
           method: 'POST',
-          body: { section: this.resourceSection, label: this.newResource.label.trim(), color: this.newResource.color, sort_order: startOrder + 1 },
+          body: {
+            section: this.resourceSection,
+            label: this.newResource.label.trim(),
+            color: this.newResource.color,
+            sort_order: startOrder + 1,
+            trainer_id: this.newResource.trainer_id,
+          },
         });
         this.resources.push(created);
         this.showAddResource = false;
       } finally {
         this.creatingResources = false;
+      }
+    },
+    trainerLabel(trainerId) {
+      const t = this.trainers.find((item) => item.id === trainerId);
+      return t ? t.full_name : '—';
+    },
+    async loadTrainers() {
+      if (!this.resourceSection) {
+        this.trainers = [];
+        return;
+      }
+      this.trainers = await apiFetch(`/trainers?section=${this.resourceSection}`);
+    },
+    openEditTrainer(t) {
+      this.editingTrainer = { ...t };
+      this.showEditTrainer = true;
+    },
+    async saveTrainerEdit() {
+      this.savingTrainer = true;
+      try {
+        await apiFetch(`/trainers/${this.editingTrainer.id}`, {
+          method: 'PUT',
+          body: { full_name: this.editingTrainer.full_name, phone: this.editingTrainer.phone },
+        });
+        this.showEditTrainer = false;
+        await this.loadTrainers();
+      } finally {
+        this.savingTrainer = false;
+      }
+    },
+    async removeTrainer(t) {
+      const ok = await showConfirm(`Удалить тренера «${t.full_name}»?`, { header: 'Удаление', confirmText: 'Удалить' });
+      if (!ok) return;
+      await apiFetch(`/trainers/${t.id}`, { method: 'DELETE' });
+      this.trainers = this.trainers.filter((x) => x.id !== t.id);
+    },
+    openAddTrainer() {
+      this.newTrainer = { full_name: '', phone: '' };
+      this.showAddTrainer = true;
+    },
+    async addTrainer() {
+      if (!this.newTrainer.full_name.trim()) {
+        await showAlert('Заполните "ФИО"');
+        return;
+      }
+      this.creatingTrainer = true;
+      try {
+        const created = await apiFetch('/trainers', {
+          method: 'POST',
+          body: { section: this.resourceSection, full_name: this.newTrainer.full_name.trim(), phone: this.newTrainer.phone },
+        });
+        this.trainers.push(created);
+        this.showAddTrainer = false;
+      } finally {
+        this.creatingTrainer = false;
       }
     },
     async loadStaff() {
@@ -955,6 +1131,13 @@ export default {
   min-width: 100px;
   font-weight: 600;
   color: #1c1c1e;
+}
+
+.resource-row-sub {
+  display: block;
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: #6a6f75;
 }
 
 .resource-color {

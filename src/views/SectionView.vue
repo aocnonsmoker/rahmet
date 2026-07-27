@@ -13,9 +13,11 @@
 import TimeSlotBookingView from './TimeSlotBookingView.vue';
 import DateRangeBookingView from './DateRangeBookingView.vue';
 import QueueListView from './QueueListView.vue';
+import ClubView from './ClubView.vue';
 import DesktopTimeSlotView from './desktop/DesktopTimeSlotView.vue';
 import DesktopDateRangeView from './desktop/DesktopDateRangeView.vue';
 import DesktopQueueView from './desktop/DesktopQueueView.vue';
+import DesktopClubView from './desktop/DesktopClubView.vue';
 import { useSectionsStore } from '@/stores/sections';
 import { useViewportStore } from '@/stores/viewport';
 
@@ -23,12 +25,14 @@ const MOBILE_TEMPLATES = {
   time_slot: TimeSlotBookingView,
   date_range: DateRangeBookingView,
   queue: QueueListView,
+  club: ClubView,
 };
 
 const DESKTOP_TEMPLATES = {
   time_slot: DesktopTimeSlotView,
   date_range: DesktopDateRangeView,
   queue: DesktopQueueView,
+  club: DesktopClubView,
 };
 
 export default {

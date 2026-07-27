@@ -34,7 +34,15 @@ export default {
     },
   },
   async mounted() {
-    await useSectionsStore().load();
+    // Force a refresh (not the cached load()) even though the router guard
+    // already loaded sections before this page rendered: ion-tab-bar only
+    // wires up each ion-tab-button's click handler inside its own updated()
+    // hook, never on mount. If `items` was already loaded and nothing
+    // changes visibleTabs after mount, ion-tab-bar never updates and the
+    // first tab click throws ("tabState.tabs is undefined") from Ionic's
+    // default no-op _getTabState. Reassigning `items` here guarantees at
+    // least one post-mount reactive update so the handler gets wired.
+    await useSectionsStore().load(true);
   },
 }
 </script>
