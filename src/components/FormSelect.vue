@@ -12,9 +12,9 @@
             v-for="opt in options"
             :key="opt.value"
             class="ff-option"
-            :class="{ 'is-selected': opt.value == modelValue }"
+            :class="{ 'is-selected': isSelected(opt.value), multiple }"
             @click="select(opt.value)"
-          >{{ opt.label }}</div>
+          ><span v-if="multiple" class="ff-checkbox">{{ isSelected(opt.value) ? '✓' : '' }}</span>{{ opt.label }}</div>
         </div>
       </Teleport>
     </div>
@@ -26,7 +26,7 @@ export default {
   name: "FormSelect",
   props: {
     modelValue: {
-      type: [String, Number],
+      type: [String, Number, Array],
       default: "",
     },
     label: {
@@ -41,6 +41,10 @@ export default {
       type: Array,
       default: () => [],
     },
+    multiple: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ["update:modelValue"],
   data() {
@@ -52,6 +56,13 @@ export default {
   },
   computed: {
     selectedLabel() {
+      if (this.multiple) {
+        const values = this.modelValue || [];
+        return this.options
+          .filter((o) => values.some((v) => v == o.value))
+          .map((o) => o.label)
+          .join(', ');
+      }
       const found = this.options.find((o) => o.value == this.modelValue);
       return found ? found.label : "";
     },
@@ -111,7 +122,19 @@ export default {
       const spaceAbove = rect.top;
       return spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
     },
+    isSelected(value) {
+      if (this.multiple) {
+        return (this.modelValue || []).some((v) => v == value);
+      }
+      return value == this.modelValue;
+    },
     select(value) {
+      if (this.multiple) {
+        const values = this.modelValue || [];
+        const next = values.some((v) => v == value) ? values.filter((v) => v != value) : [...values, value];
+        this.$emit("update:modelValue", next);
+        return;
+      }
       this.$emit("update:modelValue", value);
       this.isOpen = false;
     },
@@ -220,5 +243,24 @@ export default {
 .ff-option.is-selected {
   background: rgba(33, 150, 243, 0.15);
   font-weight: 700;
+}
+
+.ff-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 10px;
+  border-radius: 5px;
+  border: 2px solid #c4c8cc;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.ff-option.multiple.is-selected .ff-checkbox {
+  background: #2196f3;
+  border-color: #2196f3;
 }
 </style>

@@ -13,6 +13,7 @@
       <div class="page-root">
         <div class="tabs-row">
           <button class="tab-btn" :class="{ active: tab === 'clients' }" type="button" @click="tab = 'clients'">Клиенты</button>
+          <button class="tab-btn" :class="{ active: tab === 'trainers' }" type="button" @click="tab = 'trainers'">Тренеры</button>
           <button class="tab-btn" :class="{ active: tab === 'attendance' }" type="button" @click="tab = 'attendance'">Посещаемость</button>
           <button class="tab-btn" :class="{ active: tab === 'trials' }" type="button" @click="tab = 'trials'">Пробные</button>
         </div>
@@ -23,15 +24,32 @@
           <div class="list-wrapper">
             <div class="records-scroll">
               <div v-for="m in memberships" :key="m.id" class="record-card" @click="onMembershipClick(m)">
-                <div class="record-bar" :style="{ background: groupColor(m.resource_id) }"></div>
+                <div class="record-bar" :style="{ background: groupColor(m.resource_ids[0]) }"></div>
                 <div class="record-body">
                   <div class="record-title">{{ m.full_name }}</div>
-                  <div class="record-sub">{{ groupLabel(m.resource_id) }} · {{ m.phone }}</div>
+                  <div class="record-sub">{{ groupLabels(m.resource_ids) }} · {{ m.phone }}</div>
                   <div class="record-sub">Абонемент: {{ formatDate(m.start_date) }} – {{ formatDate(m.end_date) }}</div>
                   <span class="status-badge" :class="m.status">{{ membershipStatusLabel(m.status) }}</span>
                 </div>
               </div>
               <div v-if="!memberships.length" class="empty-state">Нет клиентов</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================== Тренеры ===================== -->
+        <div v-if="tab === 'trainers'" class="panel">
+          <ion-button v-if="canWrite" expand="block" class="add-btn" @click="openAddTrainer">+ Добавить тренера</ion-button>
+          <div class="list-wrapper">
+            <div class="records-scroll">
+              <div v-for="t in trainers" :key="t.id" class="record-card" @click="onTrainerClick(t)">
+                <div class="record-bar"></div>
+                <div class="record-body">
+                  <div class="record-title">{{ t.full_name }}</div>
+                  <div class="record-sub">{{ t.phone || '—' }}</div>
+                </div>
+              </div>
+              <div v-if="!trainers.length" class="empty-state">Нет тренеров</div>
             </div>
           </div>
         </div>
@@ -115,7 +133,7 @@
         <FormInput label="Телефон" type="tel" :model-value="membershipForm.phone" @update:modelValue="membershipForm.phone = $event" />
         <FormInput label="Возраст" type="number" :model-value="membershipForm.age" @update:modelValue="membershipForm.age = $event" />
         <FormInput label="ФИО родителя/опекуна" type="text" :model-value="membershipForm.parent_name" @update:modelValue="membershipForm.parent_name = $event" />
-        <FormSelect label="Группа" placeholder="Выберите группу" :model-value="membershipForm.resource_id" :options="groupOptions" @update:modelValue="membershipForm.resource_id = $event" />
+        <FormSelect label="Группы" placeholder="Выберите группы" multiple :model-value="membershipForm.resource_ids" :options="groupOptions" @update:modelValue="membershipForm.resource_ids = $event" />
         <FormInput label="Дата оплаты" type="date" :model-value="membershipForm.payment_date" @update:modelValue="membershipForm.payment_date = $event" />
         <FormInput label="Абонемент с" type="date" :model-value="membershipForm.start_date" @update:modelValue="membershipForm.start_date = $event" />
         <FormInput label="Абонемент по" type="date" :model-value="membershipForm.end_date" @update:modelValue="membershipForm.end_date = $event" />
@@ -145,6 +163,25 @@
         <FormInput label="Дата и время" type="datetime-local" :model-value="trialForm.scheduled_at" @update:modelValue="trialForm.scheduled_at = $event" />
         <FormSelect v-if="editingTrialId" label="Статус" :model-value="trialForm.status" :options="trialStatusOptions" @update:modelValue="trialForm.status = $event" />
         <ion-button v-if="editingTrialId" expand="block" class="delete-btn" color="danger" @click="deleteTrial">Удалить запись</ion-button>
+      </ion-content>
+    </ion-modal>
+
+    <!-- Модальное окно добавления/редактирования тренера -->
+    <ion-modal class="club-modal" :is-open="showTrainerModal">
+      <ion-header class="club-modal-header ion-no-border">
+        <ion-toolbar class="club-modal-toolbar">
+          <ion-buttons slot="start">
+            <ion-button fill="clear" color="medium" @click="showTrainerModal = false">Отменить</ion-button>
+          </ion-buttons>
+          <ion-buttons slot="end">
+            <ion-button fill="clear" color="primary" :strong="true" @click="confirmTrainer">Сохранить</ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding" v-if="trainerForm">
+        <FormInput label="ФИО" type="text" :model-value="trainerForm.full_name" @update:modelValue="trainerForm.full_name = $event" />
+        <FormInput label="Телефон" type="tel" :model-value="trainerForm.phone" @update:modelValue="trainerForm.phone = $event" />
+        <ion-button v-if="editingTrainerId" expand="block" class="delete-btn" color="danger" @click="deleteTrainer">Удалить тренера</ion-button>
       </ion-content>
     </ion-modal>
   </ion-page>
@@ -192,6 +229,10 @@ export default {
       showTrialModal: false,
       editingTrialId: null,
       trialForm: null,
+
+      showTrainerModal: false,
+      editingTrainerId: null,
+      trainerForm: null,
 
       attendanceGroupId: null,
       attendanceMonth: moment().format('YYYY-MM'),
@@ -247,6 +288,10 @@ export default {
       const g = this.groups.find((item) => item.id === resourceId);
       return g ? g.label : '—';
     },
+    groupLabels(resourceIds) {
+      if (!resourceIds || !resourceIds.length) return '—';
+      return resourceIds.map((id) => this.groupLabel(id)).join(', ');
+    },
     groupColor(resourceId) {
       const g = this.groups.find((item) => item.id === resourceId);
       return g ? g.color : '#9aa0a6';
@@ -271,10 +316,10 @@ export default {
       this.editingMembershipId = null;
       this.membershipForm = {
         full_name: '',
-        phone: '',
+        phone: '+7',
         age: null,
         parent_name: '',
-        resource_id: this.groups[0] ? this.groups[0].id : null,
+        resource_ids: [],
         payment_date: moment().format('YYYY-MM-DD'),
         start_date: moment().format('YYYY-MM-DD'),
         end_date: moment().add(1, 'month').format('YYYY-MM-DD'),
@@ -291,7 +336,7 @@ export default {
         phone: m.phone,
         age: m.age,
         parent_name: m.parent_name,
-        resource_id: m.resource_id,
+        resource_ids: [...m.resource_ids],
         payment_date: m.payment_date ? moment(m.payment_date).format('YYYY-MM-DD') : '',
         start_date: moment(m.start_date).format('YYYY-MM-DD'),
         end_date: moment(m.end_date).format('YYYY-MM-DD'),
@@ -301,8 +346,8 @@ export default {
       this.showMembershipModal = true;
     },
     async confirmMembership() {
-      if (!this.membershipForm.full_name.trim() || !this.membershipForm.phone.trim() || !this.membershipForm.resource_id) {
-        await showAlert('Заполните ФИО, телефон и группу');
+      if (!this.membershipForm.full_name.trim() || !this.membershipForm.phone.trim() || !this.membershipForm.resource_ids.length) {
+        await showAlert('Заполните ФИО, телефон и хотя бы одну группу');
         return;
       }
       const body = { ...this.membershipForm };
@@ -379,7 +424,7 @@ export default {
     // ---------------- Пробные занятия ----------------
     openAddTrial() {
       this.editingTrialId = null;
-      this.trialForm = { full_name: '', phone: '', age: null, resource_id: null, scheduled_at: moment().format('YYYY-MM-DDTHH:mm') };
+      this.trialForm = { full_name: '', phone: '+7', age: null, resource_id: null, scheduled_at: moment().format('YYYY-MM-DDTHH:mm') };
       this.showTrialModal = true;
     },
     onTrialClick(t) {
@@ -414,6 +459,39 @@ export default {
       await apiFetch(`/trial_lessons/${this.editingTrialId}?section=${this.sectionKey}`, { method: 'DELETE' });
       this.showTrialModal = false;
       await this.loadTrialLessons();
+    },
+
+    // ---------------- Тренеры ----------------
+    openAddTrainer() {
+      this.editingTrainerId = null;
+      this.trainerForm = { full_name: '', phone: '+7' };
+      this.showTrainerModal = true;
+    },
+    onTrainerClick(t) {
+      if (!this.canWrite) return;
+      this.editingTrainerId = t.id;
+      this.trainerForm = { full_name: t.full_name, phone: t.phone };
+      this.showTrainerModal = true;
+    },
+    async confirmTrainer() {
+      if (!this.trainerForm.full_name.trim()) {
+        await showAlert('Заполните ФИО');
+        return;
+      }
+      if (this.editingTrainerId) {
+        await apiFetch(`/trainers/${this.editingTrainerId}`, { method: 'PUT', body: this.trainerForm });
+      } else {
+        await apiFetch('/trainers', { method: 'POST', body: { section: this.sectionKey, ...this.trainerForm } });
+      }
+      this.showTrainerModal = false;
+      await this.loadTrainers();
+    },
+    async deleteTrainer() {
+      const ok = await showConfirm('Удалить тренера?', { header: 'Удаление', confirmText: 'Удалить' });
+      if (!ok) return;
+      await apiFetch(`/trainers/${this.editingTrainerId}`, { method: 'DELETE' });
+      this.showTrainerModal = false;
+      await this.loadTrainers();
     },
   },
 };

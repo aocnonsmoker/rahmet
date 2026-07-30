@@ -112,23 +112,6 @@
                 </div>
                 <button class="add-section-btn" type="button" @click="openAddResource">+ Добавить</button>
               </template>
-
-              <template v-if="editingSection.template === 'club'">
-                <div class="icon-field-label" style="margin-top: 16px;">Тренеры</div>
-                <div class="resource-list">
-                  <div v-for="t in trainers" :key="t.id" class="resource-row">
-                    <div class="resource-row-label">
-                      {{ t.full_name }}
-                      <span v-if="t.phone" class="resource-row-sub">{{ t.phone }}</span>
-                    </div>
-                    <div class="section-actions">
-                      <button class="icon-btn edit" type="button" @click="openEditTrainer(t)">Изменить</button>
-                      <button class="icon-btn danger" type="button" @click="removeTrainer(t)">Удалить</button>
-                    </div>
-                  </div>
-                </div>
-                <button class="add-section-btn" type="button" @click="openAddTrainer">+ Добавить тренера</button>
-              </template>
             </template>
           </ion-content>
         </ion-modal>
@@ -288,68 +271,6 @@
           </ion-content>
         </ion-modal>
 
-        <!-- Модальное окно редактирования тренера -->
-        <ion-modal class="section-modal" :is-open="showEditTrainer">
-          <ion-header class="section-modal-header ion-no-border">
-            <ion-toolbar class="section-modal-toolbar">
-              <ion-buttons slot="start">
-                <ion-button fill="clear" color="medium" @click="showEditTrainer = false">Отменить</ion-button>
-              </ion-buttons>
-              <ion-buttons slot="end">
-                <ion-button fill="clear" color="primary" :strong="true" :disabled="savingTrainer" @click="saveTrainerEdit">
-                  {{ savingTrainer ? 'Сохраняем…' : 'Сохранить' }}
-                </ion-button>
-              </ion-buttons>
-            </ion-toolbar>
-          </ion-header>
-          <ion-content class="ion-padding">
-            <template v-if="editingTrainer">
-              <FormInput
-                label="ФИО"
-                type="text"
-                :model-value="editingTrainer.full_name"
-                @update:modelValue="editingTrainer.full_name = $event"
-              />
-              <FormInput
-                label="Телефон"
-                type="tel"
-                :model-value="editingTrainer.phone"
-                @update:modelValue="editingTrainer.phone = $event"
-              />
-            </template>
-          </ion-content>
-        </ion-modal>
-
-        <!-- Модальное окно добавления тренера -->
-        <ion-modal class="section-modal" :is-open="showAddTrainer">
-          <ion-header class="section-modal-header ion-no-border">
-            <ion-toolbar class="section-modal-toolbar">
-              <ion-buttons slot="start">
-                <ion-button fill="clear" color="medium" @click="showAddTrainer = false">Отменить</ion-button>
-              </ion-buttons>
-              <ion-buttons slot="end">
-                <ion-button fill="clear" color="primary" :strong="true" :disabled="creatingTrainer" @click="addTrainer">
-                  {{ creatingTrainer ? 'Создаём…' : 'Добавить' }}
-                </ion-button>
-              </ion-buttons>
-            </ion-toolbar>
-          </ion-header>
-          <ion-content class="ion-padding">
-            <FormInput
-              label="ФИО"
-              type="text"
-              :model-value="newTrainer.full_name"
-              @update:modelValue="newTrainer.full_name = $event"
-            />
-            <FormInput
-              label="Телефон"
-              type="tel"
-              :model-value="newTrainer.phone"
-              @update:modelValue="newTrainer.phone = $event"
-            />
-          </ion-content>
-        </ion-modal>
-
         <!-- ===================== Сотрудники ===================== -->
         <div v-if="tab === 'staff'" class="panel">
           <div class="staff-list">
@@ -495,12 +416,6 @@ export default {
       creatingResources: false,
 
       trainers: [],
-      showEditTrainer: false,
-      editingTrainer: null,
-      savingTrainer: false,
-      showAddTrainer: false,
-      newTrainer: { full_name: '', phone: '' },
-      creatingTrainer: false,
 
       staff: [],
       showAddStaff: false,
@@ -720,50 +635,6 @@ export default {
         return;
       }
       this.trainers = await apiFetch(`/trainers?section=${this.resourceSection}`);
-    },
-    openEditTrainer(t) {
-      this.editingTrainer = { ...t };
-      this.showEditTrainer = true;
-    },
-    async saveTrainerEdit() {
-      this.savingTrainer = true;
-      try {
-        await apiFetch(`/trainers/${this.editingTrainer.id}`, {
-          method: 'PUT',
-          body: { full_name: this.editingTrainer.full_name, phone: this.editingTrainer.phone },
-        });
-        this.showEditTrainer = false;
-        await this.loadTrainers();
-      } finally {
-        this.savingTrainer = false;
-      }
-    },
-    async removeTrainer(t) {
-      const ok = await showConfirm(`Удалить тренера «${t.full_name}»?`, { header: 'Удаление', confirmText: 'Удалить' });
-      if (!ok) return;
-      await apiFetch(`/trainers/${t.id}`, { method: 'DELETE' });
-      this.trainers = this.trainers.filter((x) => x.id !== t.id);
-    },
-    openAddTrainer() {
-      this.newTrainer = { full_name: '', phone: '' };
-      this.showAddTrainer = true;
-    },
-    async addTrainer() {
-      if (!this.newTrainer.full_name.trim()) {
-        await showAlert('Заполните "ФИО"');
-        return;
-      }
-      this.creatingTrainer = true;
-      try {
-        const created = await apiFetch('/trainers', {
-          method: 'POST',
-          body: { section: this.resourceSection, full_name: this.newTrainer.full_name.trim(), phone: this.newTrainer.phone },
-        });
-        this.trainers.push(created);
-        this.showAddTrainer = false;
-      } finally {
-        this.creatingTrainer = false;
-      }
     },
     async loadStaff() {
       this.staff = await apiFetch('/users');
