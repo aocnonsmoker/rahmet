@@ -66,6 +66,10 @@ export default {
       try {
         const auth = useAuthStore();
         await auth.login(this.tenantSlug.trim(), this.username.trim(), this.password);
+        if (auth.isSuperadmin) {
+          this.$router.replace('/admin');
+          return;
+        }
         if (!auth.isSubscriptionActive) {
           this.$router.replace('/subscription-expired');
           return;

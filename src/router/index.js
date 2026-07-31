@@ -17,6 +17,10 @@ const routes = [
     component: () => import('@/views/SubscriptionExpired.vue'),
   },
   {
+    path: '/admin',
+    component: () => import('@/views/admin/AdminView.vue'),
+  },
+  {
     // Single entry point for both mobile and desktop — AppShell picks the
     // shell (bottom tabs vs sidebar) by viewport width, see useViewportStore.
     path: '/tabs/',
@@ -62,6 +66,12 @@ router.beforeEach(async (to) => {
     return true;
   }
   if (!auth.isAuthenticated) {
+    return '/login';
+  }
+  if (auth.isSuperadmin) {
+    return to.path === '/admin' ? true : '/admin';
+  }
+  if (to.path === '/admin') {
     return '/login';
   }
   if (!auth.isSubscriptionActive) {

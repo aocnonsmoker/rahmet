@@ -26,6 +26,7 @@ export const useAuthStore = defineStore('auth', {
   getters: {
     isAuthenticated: (state) => !!state.token,
     isOwner: (state) => state.role === 'owner',
+    isSuperadmin: (state) => state.role === 'superadmin',
     // Owner always has full write access; read_only only limits employees.
     canWrite: (state) => state.role === 'owner' || !state.readOnly,
     isSubscriptionActive: (state) => ['active', 'trial'].includes(state.subscriptionStatus),
