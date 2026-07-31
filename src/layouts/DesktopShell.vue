@@ -1,7 +1,7 @@
 <template>
   <ion-page class="shell">
     <aside class="sidebar">
-      <div class="brand">Рахмет</div>
+      <div class="brand">jmb</div>
 
       <nav class="nav-list">
         <router-link

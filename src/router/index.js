@@ -27,6 +27,16 @@ const routes = [
     component: AppShell,
     children: [
       {
+        // Rendered when the tenant has zero accessible sections — e.g. a
+        // brand-new company the owner hasn't set up yet. Without a matching
+        // child route here, bare '/tabs/' has nothing to render (blank
+        // screen) whenever the redirect-to-first-section guard below can't
+        // find anywhere to send the owner, such as after a back/forward
+        // navigation that lands here directly.
+        path: '',
+        component: () => import('@/views/WelcomeView.vue'),
+      },
+      {
         path: 'cash',
         component: () => import('@/views/CashGate.vue'),
         meta: { ownerOnly: true },
@@ -87,7 +97,11 @@ router.beforeEach(async (to) => {
 
   if (to.path === '/tabs/' || to.path === '/tabs') {
     const key = firstAccessibleSectionKey(auth, sections);
-    return key ? `/tabs/${key}` : (auth.isOwner ? '/tabs/settings' : '/login');
+    if (key) return `/tabs/${key}`;
+    // No sections yet: owners land on the welcome tab (with a link to
+    // Настройки) instead of a blank screen; an employee has nothing to do
+    // here at all.
+    return auth.isOwner ? true : '/login';
   }
   if (to.meta.ownerOnly && !auth.isOwner) {
     const key = firstAccessibleSectionKey(auth, sections);

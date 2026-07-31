@@ -66,16 +66,10 @@ export default {
       try {
         const auth = useAuthStore();
         await auth.login(this.tenantSlug.trim(), this.username.trim(), this.password);
-        if (auth.isSuperadmin) {
-          this.$router.replace('/admin');
-          return;
-        }
-        if (!auth.isSubscriptionActive) {
-          this.$router.replace('/subscription-expired');
-          return;
-        }
-        const firstSection = auth.isOwner ? 'spa' : (auth.sections[0] || 'spa');
-        this.$router.replace(`/tabs/${firstSection}`);
+        // Where exactly to land (first section / welcome / subscription-expired)
+        // is the router guard's job — it's the single source of truth for that
+        // decision so it can't drift out of sync with this component.
+        this.$router.replace(auth.isSuperadmin ? '/admin' : '/tabs/');
       } catch (e) {
         this.error = 'Неверный код компании, логин или пароль';
       } finally {
