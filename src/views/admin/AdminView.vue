@@ -347,6 +347,40 @@ export default {
   cursor: pointer;
 }
 
+@media (max-width: 640px) {
+  .admin-root {
+    padding: 16px;
+  }
+
+  .admin-header {
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .admin-header-actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .primary-btn {
+    flex: 1 1 100%;
+    order: 3;
+    text-align: center;
+  }
+
+  .link-btn {
+    order: 1;
+  }
+
+  .logout-btn {
+    order: 2;
+    margin-left: auto;
+  }
+}
+
 .tenants-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
