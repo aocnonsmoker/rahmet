@@ -3,7 +3,10 @@
     <label v-if="label" class="ff-label">{{ label }}</label>
     <div class="ff-wrap" :class="{ open: isOpen, 'open-up': openUpward }">
       <button ref="trigger" type="button" class="ff-trigger" @click="toggle">
-        <span :class="{ 'ff-placeholder': !selectedLabel }">{{ selectedLabel || placeholder }}</span>
+        <span class="ff-trigger-content">
+          <span v-if="selectedColor" class="ff-dot" :style="{ background: selectedColor }"></span>
+          <span :class="{ 'ff-placeholder': !selectedLabel }">{{ selectedLabel || placeholder }}</span>
+        </span>
         <span class="ff-arrow">▾</span>
       </button>
       <Teleport to="body">
@@ -14,7 +17,7 @@
             class="ff-option"
             :class="{ 'is-selected': isSelected(opt.value), multiple }"
             @click="select(opt.value)"
-          ><span v-if="multiple" class="ff-checkbox">{{ isSelected(opt.value) ? '✓' : '' }}</span>{{ opt.label }}</div>
+          ><span v-if="multiple" class="ff-checkbox">{{ isSelected(opt.value) ? '✓' : '' }}</span><span v-if="opt.color" class="ff-dot" :style="{ background: opt.color }"></span>{{ opt.label }}</div>
         </div>
       </Teleport>
     </div>
@@ -65,6 +68,11 @@ export default {
       }
       const found = this.options.find((o) => o.value == this.modelValue);
       return found ? found.label : "";
+    },
+    selectedColor() {
+      if (this.multiple) return null;
+      const found = this.options.find((o) => o.value == this.modelValue);
+      return found && found.color ? found.color : null;
     },
   },
   mounted() {
@@ -183,9 +191,29 @@ export default {
   text-align: left;
 }
 
+.ff-trigger-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
 .ff-placeholder {
   color: #9aa0a6;
   font-weight: 400;
+}
+
+.ff-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.ff-option .ff-dot {
+  margin-right: 8px;
 }
 
 .ff-arrow {

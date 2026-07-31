@@ -102,7 +102,6 @@
                     <span class="resource-color" :style="{ background: r.color }"></span>
                     <div class="resource-row-label">
                       {{ r.label }}
-                      <span v-if="editingSection.template === 'club' && r.trainer_id" class="resource-row-sub">{{ trainerLabel(r.trainer_id) }}</span>
                     </div>
                     <div class="section-actions">
                       <button class="icon-btn edit" type="button" @click="openEditResource(r)">Изменить</button>
@@ -214,14 +213,6 @@
                   @click="editingResource.color = c"
                 ></button>
               </div>
-              <FormSelect
-                v-if="editingSection.template === 'club'"
-                label="Тренер"
-                placeholder="Не назначен"
-                :model-value="editingResource.trainer_id"
-                :options="trainerOptions"
-                @update:modelValue="editingResource.trainer_id = $event"
-              />
             </template>
           </ion-content>
         </ion-modal>
@@ -260,14 +251,6 @@
                 @click="newResource.color = c"
               ></button>
             </div>
-            <FormSelect
-              v-if="editingSection && editingSection.template === 'club'"
-              label="Тренер"
-              placeholder="Не назначен"
-              :model-value="newResource.trainer_id"
-              :options="trainerOptions"
-              @update:modelValue="newResource.trainer_id = $event"
-            />
           </ion-content>
         </ion-modal>
 
@@ -412,10 +395,8 @@ export default {
       savingResource: false,
 
       showAddResource: false,
-      newResource: { label: '', color: '#2196f3', trainer_id: null },
+      newResource: { label: '', color: '#2196f3' },
       creatingResources: false,
-
-      trainers: [],
 
       staff: [],
       showAddStaff: false,
@@ -462,9 +443,6 @@ export default {
         { value: 'split', label: 'Взрослые и детские' },
       ];
     },
-    trainerOptions() {
-      return this.trainers.map((t) => ({ value: t.id, label: t.full_name }));
-    },
     enabledSectionKeys() {
       return this.sectionsList.filter((s) => s.enabled).map((s) => s.key);
     },
@@ -504,9 +482,6 @@ export default {
       if (s.template !== 'queue') {
         this.resourceSection = s.key;
         await this.loadResources();
-      }
-      if (s.template === 'club') {
-        await this.loadTrainers();
       }
     },
     async saveSectionEdit() {
@@ -581,9 +556,6 @@ export default {
       this.savingResource = true;
       try {
         const body = { label: this.editingResource.label, color: this.editingResource.color };
-        if (this.editingSection.template === 'club') {
-          body.trainer_id = this.editingResource.trainer_id;
-        }
         await apiFetch(`/resources/${this.editingResource.id}`, { method: 'PUT', body });
         this.showEditResource = false;
         await this.loadResources();
@@ -598,7 +570,7 @@ export default {
       this.resources = this.resources.filter((x) => x.id !== r.id);
     },
     openAddResource() {
-      this.newResource = { label: '', color: '#2196f3', trainer_id: null };
+      this.newResource = { label: '', color: '#2196f3' };
       this.showAddResource = true;
     },
     async addResources() {
@@ -616,7 +588,6 @@ export default {
             label: this.newResource.label.trim(),
             color: this.newResource.color,
             sort_order: startOrder + 1,
-            trainer_id: this.newResource.trainer_id,
           },
         });
         this.resources.push(created);
@@ -624,17 +595,6 @@ export default {
       } finally {
         this.creatingResources = false;
       }
-    },
-    trainerLabel(trainerId) {
-      const t = this.trainers.find((item) => item.id === trainerId);
-      return t ? t.full_name : '—';
-    },
-    async loadTrainers() {
-      if (!this.resourceSection) {
-        this.trainers = [];
-        return;
-      }
-      this.trainers = await apiFetch(`/trainers?section=${this.resourceSection}`);
     },
     async loadStaff() {
       this.staff = await apiFetch('/users');

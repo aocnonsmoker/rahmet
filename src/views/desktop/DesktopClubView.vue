@@ -2,6 +2,10 @@
   <ion-page class="page">
     <div class="page-header">
       <h1 class="page-title">{{ label }}</h1>
+      <button class="link-btn" type="button" @click="refresh">
+        <ion-icon :icon="refreshIcon"></ion-icon>
+        Обновить
+      </button>
       <button v-if="tab === 'clients' && canWrite" class="primary-btn" type="button" @click="openAddMembership">+ Добавить клиента</button>
       <button v-if="tab === 'trials' && canWrite" class="primary-btn" type="button" @click="openAddTrial">+ Записать на пробное</button>
       <button v-if="tab === 'trainers' && canWrite" class="primary-btn" type="button" @click="openAddTrainer">+ Добавить тренера</button>
@@ -38,6 +42,7 @@
           <div class="record-body">
             <div class="record-title">{{ t.full_name }}</div>
             <div class="record-sub">{{ t.phone || '—' }}</div>
+            <div class="record-sub">{{ groupLabels(t.resource_ids) }}</div>
           </div>
         </div>
         <div v-if="!trainers.length" class="empty-state">Нет тренеров</div>
@@ -55,34 +60,36 @@
           @update:modelValue="onGroupChange"
         />
         <div v-if="attendanceGroupId" class="month-nav">
-          <button class="nav-arrow" type="button" @click="prevMonth">‹</button>
-          <div class="month-label">{{ monthLabel }}</div>
-          <button class="nav-arrow" type="button" @click="nextMonth">›</button>
+          <button class="nav-arrow" type="button" @click="prevWeek">‹</button>
+          <div class="month-label">{{ weekLabel }}</div>
+          <button class="nav-arrow" type="button" @click="nextWeek">›</button>
         </div>
       </div>
-      <div v-if="attendanceGroupId" class="attendance-grid-wrapper">
-        <table class="attendance-grid">
-          <thead>
-            <tr>
-              <th class="att-name-col">Клиент</th>
-              <th v-for="d in monthDays" :key="d">{{ d }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="m in attendanceMemberships" :key="m.id">
-              <td class="att-name-col">{{ m.full_name }}</td>
-              <td
-                v-for="d in monthDays"
-                :key="d"
-                class="att-cell"
-                :class="attendanceCellClass(m.id, d)"
-                @click="toggleAttendance(m.id, d)"
-              >{{ attendanceCellMark(m.id, d) }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-if="!attendanceMemberships.length" class="empty-state">В этой группе нет клиентов</div>
-      </div>
+      <template v-if="attendanceGroupId">
+        <div class="attendance-cards">
+          <div v-for="m in attendanceMemberships" :key="m.id" class="attendance-card">
+            <div class="attendance-card-name">{{ m.full_name }}</div>
+            <div class="attendance-days">
+              <div v-for="d in weekDays" :key="d.date" class="attendance-day-col">
+                <div class="attendance-day-label">
+                  <span class="attendance-day-name">{{ d.name }}</span>
+                  <span class="attendance-day-num">{{ d.num }}</span>
+                </div>
+                <div
+                  class="att-cell"
+                  :class="attendanceCellClass(m.id, d.date)"
+                  @click="toggleAttendance(m.id, d.date)"
+                >{{ attendanceCellMark(m.id, d.date) }}</div>
+              </div>
+            </div>
+          </div>
+          <div v-if="!attendanceMemberships.length" class="empty-state">В этой группе нет клиентов</div>
+        </div>
+        <div v-if="attendanceMemberships.length" class="attendance-legend">
+          <span class="legend-item present">✓ Был</span>
+          <span class="legend-item absent">✕ Пропуск</span>
+        </div>
+      </template>
       <div v-else class="empty-state">Выберите группу, чтобы увидеть табель</div>
     </div>
 
@@ -146,6 +153,7 @@
       <template v-if="trainerForm">
         <FormInput label="ФИО" type="text" :model-value="trainerForm.full_name" @update:modelValue="trainerForm.full_name = $event" />
         <FormInput label="Телефон" type="tel" :model-value="trainerForm.phone" @update:modelValue="trainerForm.phone = $event" />
+        <FormSelect label="Группы" placeholder="Выберите группы" multiple :model-value="trainerForm.resource_ids" :options="plainGroupOptions" @update:modelValue="trainerForm.resource_ids = $event" />
       </template>
       <template #footer>
         <button v-if="editingTrainerId" class="pill-btn danger" type="button" @click="deleteTrainer">Удалить</button>
@@ -158,13 +166,15 @@
 
 <script>
 import moment from 'moment';
-import { IonPage } from '@ionic/vue';
+import { IonPage, IonIcon } from '@ionic/vue';
+import { refreshOutline } from 'ionicons/icons';
 import DesktopModal from '@/components/desktop/DesktopModal.vue';
 import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
 import { apiFetch } from '@/services/api';
 import { showAlert, showConfirm } from '@/services/dialogs';
 import { useAuthStore } from '@/stores/auth';
+import { ruDayShort, ruMonthGenitive } from '@/utils/ruDate';
 
 const MEMBERSHIP_STATUS_LABELS = { active: 'Активен', expired: 'Закончился', frozen: 'Заморожен' };
 const TRIAL_STATUS_LABELS = {
@@ -178,13 +188,14 @@ const TRIAL_STATUS_LABELS = {
 
 export default {
   name: 'DesktopClubView',
-  components: { IonPage, DesktopModal, FormInput, FormSelect },
+  components: { IonPage, IonIcon, DesktopModal, FormInput, FormSelect },
   props: {
     sectionKey: { type: String, required: true },
     label: { type: String, required: true },
   },
   data() {
     return {
+      refreshIcon: refreshOutline,
       tab: 'clients',
       groups: [],
       trainers: [],
@@ -204,7 +215,7 @@ export default {
       trainerForm: null,
 
       attendanceGroupId: null,
-      attendanceMonth: moment().format('YYYY-MM'),
+      attendanceWeekStart: moment().startOf('isoWeek').format('YYYY-MM-DD'),
       attendanceMemberships: [],
       attendanceMarks: [],
     };
@@ -214,10 +225,13 @@ export default {
       return useAuthStore().canWrite;
     },
     groupOptions() {
-      return this.groups.map((g) => ({
-        value: g.id,
-        label: g.trainer_id ? `${g.label} — ${this.trainerLabel(g.trainer_id)}` : g.label,
-      }));
+      return this.groups.map((g) => {
+        const names = this.trainers.filter((t) => t.resource_ids.includes(g.id)).map((t) => t.full_name);
+        return { value: g.id, label: names.length ? `${g.label} — ${names.join(', ')}` : g.label, color: g.color };
+      });
+    },
+    plainGroupOptions() {
+      return this.groups.map((g) => ({ value: g.id, label: g.label }));
     },
     membershipStatusOptions() {
       return Object.entries(MEMBERSHIP_STATUS_LABELS).map(([value, label]) => ({ value, label }));
@@ -225,27 +239,36 @@ export default {
     trialStatusOptions() {
       return Object.entries(TRIAL_STATUS_LABELS).map(([value, label]) => ({ value, label }));
     },
-    monthLabel() {
-      return moment(this.attendanceMonth, 'YYYY-MM').format('MMMM YYYY');
+    weekDays() {
+      const start = moment(this.attendanceWeekStart, 'YYYY-MM-DD');
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = start.clone().add(i, 'days');
+        return { date: d.format('YYYY-MM-DD'), num: d.date(), name: ruDayShort(d) };
+      });
     },
-    monthDays() {
-      const days = moment(this.attendanceMonth, 'YYYY-MM').daysInMonth();
-      return Array.from({ length: days }, (_, i) => i + 1);
+    weekLabel() {
+      const start = moment(this.attendanceWeekStart, 'YYYY-MM-DD');
+      const end = start.clone().add(6, 'days');
+      const endLabel = `${end.date()} ${ruMonthGenitive(end)} ${end.year()}`;
+      if (start.year() !== end.year() || start.month() !== end.month()) {
+        return `${start.date()} ${ruMonthGenitive(start)} – ${endLabel}`;
+      }
+      return `${start.date()} – ${endLabel}`;
     },
   },
   async mounted() {
     await Promise.all([this.loadGroups(), this.loadTrainers(), this.loadMemberships(), this.loadTrialLessons()]);
   },
   methods: {
+    async refresh() {
+      await Promise.all([this.loadGroups(), this.loadTrainers(), this.loadMemberships(), this.loadTrialLessons()]);
+      if (this.attendanceGroupId) await this.loadAttendance();
+    },
     async loadGroups() {
       this.groups = await apiFetch(`/resources?section=${this.sectionKey}`);
     },
     async loadTrainers() {
       this.trainers = await apiFetch(`/trainers?section=${this.sectionKey}`);
-    },
-    trainerLabel(trainerId) {
-      const t = this.trainers.find((item) => item.id === trainerId);
-      return t ? t.full_name : '—';
     },
     async loadMemberships() {
       this.memberships = await apiFetch(`/memberships?section=${this.sectionKey}`);
@@ -342,41 +365,49 @@ export default {
       this.attendanceGroupId = groupId;
       await this.loadAttendance();
     },
-    async prevMonth() {
-      this.attendanceMonth = moment(this.attendanceMonth, 'YYYY-MM').subtract(1, 'month').format('YYYY-MM');
+    async prevWeek() {
+      this.attendanceWeekStart = moment(this.attendanceWeekStart, 'YYYY-MM-DD').subtract(7, 'days').format('YYYY-MM-DD');
       await this.loadAttendance();
     },
-    async nextMonth() {
-      this.attendanceMonth = moment(this.attendanceMonth, 'YYYY-MM').add(1, 'month').format('YYYY-MM');
+    async nextWeek() {
+      this.attendanceWeekStart = moment(this.attendanceWeekStart, 'YYYY-MM-DD').add(7, 'days').format('YYYY-MM-DD');
       await this.loadAttendance();
     },
     async loadAttendance() {
       if (!this.attendanceGroupId) return;
+      const start = this.attendanceWeekStart;
+      const end = moment(this.attendanceWeekStart, 'YYYY-MM-DD').add(6, 'days').format('YYYY-MM-DD');
       const result = await apiFetch(
-        `/attendance?section=${this.sectionKey}&resource_id=${this.attendanceGroupId}&month=${this.attendanceMonth}`
+        `/attendance?section=${this.sectionKey}&resource_id=${this.attendanceGroupId}&start_date=${start}&end_date=${end}`
       );
       this.attendanceMemberships = result.memberships;
       this.attendanceMarks = result.attendance;
     },
-    attendanceMarkFor(membershipId, day) {
-      const dateStr = moment(this.attendanceMonth, 'YYYY-MM').date(day).format('YYYY-MM-DD');
+    attendanceMarkFor(membershipId, dateStr) {
       return this.attendanceMarks.find((a) => a.membership_id === membershipId && moment(a.date).format('YYYY-MM-DD') === dateStr);
     },
-    attendanceCellMark(membershipId, day) {
-      const mark = this.attendanceMarkFor(membershipId, day);
+    attendanceCellMark(membershipId, dateStr) {
+      const mark = this.attendanceMarkFor(membershipId, dateStr);
       if (!mark) return '';
       return mark.status === 'present' ? '✓' : '✕';
     },
-    attendanceCellClass(membershipId, day) {
-      const mark = this.attendanceMarkFor(membershipId, day);
+    attendanceCellClass(membershipId, dateStr) {
+      const mark = this.attendanceMarkFor(membershipId, dateStr);
       if (!mark) return '';
       return mark.status;
     },
-    async toggleAttendance(membershipId, day) {
+    async toggleAttendance(membershipId, dateStr) {
       if (!this.canWrite) return;
-      const mark = this.attendanceMarkFor(membershipId, day);
-      const nextStatus = !mark || mark.status === 'absent' ? 'present' : 'absent';
-      const dateStr = moment(this.attendanceMonth, 'YYYY-MM').date(day).format('YYYY-MM-DD');
+      // Cycle: blank -> present -> absent -> blank ... so an accidental click can be undone.
+      const mark = this.attendanceMarkFor(membershipId, dateStr);
+      if (mark && mark.status === 'absent') {
+        await apiFetch(`/attendance?section=${this.sectionKey}&membership_id=${membershipId}&date=${dateStr}`, {
+          method: 'DELETE',
+        });
+        this.attendanceMarks = this.attendanceMarks.filter((a) => a.id !== mark.id);
+        return;
+      }
+      const nextStatus = mark ? 'absent' : 'present';
       const updated = await apiFetch(`/attendance?section=${this.sectionKey}`, {
         method: 'POST',
         body: { membership_id: membershipId, date: dateStr, status: nextStatus },
@@ -432,13 +463,13 @@ export default {
     // ---------------- Тренеры ----------------
     openAddTrainer() {
       this.editingTrainerId = null;
-      this.trainerForm = { full_name: '', phone: '+7' };
+      this.trainerForm = { full_name: '', phone: '+7', resource_ids: [] };
       this.showTrainerModal = true;
     },
     onTrainerClick(t) {
       if (!this.canWrite) return;
       this.editingTrainerId = t.id;
-      this.trainerForm = { full_name: t.full_name, phone: t.phone };
+      this.trainerForm = { full_name: t.full_name, phone: t.phone, resource_ids: [...t.resource_ids] };
       this.showTrainerModal = true;
     },
     async confirmTrainer() {
@@ -493,6 +524,24 @@ export default {
   font-weight: 800;
   color: #1c1c1e;
   margin: 0;
+}
+
+.link-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: #9aa0a6;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.link-btn ion-icon {
+  font-size: 16px;
 }
 
 .primary-btn {
@@ -625,12 +674,14 @@ export default {
   display: flex;
   align-items: center;
   gap: 10px;
+  background: #eef0f0;
+  border-radius: 14px;
+  padding: 8px 14px;
 }
 
 .month-label {
   font-weight: 700;
   color: #1c1c1e;
-  text-transform: capitalize;
   min-width: 140px;
   text-align: center;
 }
@@ -638,60 +689,97 @@ export default {
 .nav-arrow {
   border: none;
   background: transparent;
-  color: #9aa0a6;
-  font-size: 22px;
+  color: #6a6f75;
+  font-size: 20px;
   line-height: 1;
-  padding: 4px 10px;
+  padding: 2px 6px;
   cursor: pointer;
 }
 
-.attendance-grid-wrapper {
-  overflow-x: auto;
+.attendance-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.attendance-card {
   background: #ffffff;
   border-radius: 14px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  padding: 16px;
+  max-width: 640px;
 }
 
-.attendance-grid {
-  border-collapse: collapse;
-  width: 100%;
+.attendance-card-name {
+  font-weight: 700;
+  color: #2196f3;
+  margin-bottom: 12px;
 }
 
-.attendance-grid th,
-.attendance-grid td {
-  border: 1px solid #eceef0;
-  text-align: center;
-  padding: 8px 10px;
-  font-size: 0.82rem;
-  white-space: nowrap;
+.attendance-days {
+  display: flex;
+  gap: 8px;
 }
 
-.att-name-col {
-  position: sticky;
-  left: 0;
-  background: #ffffff;
-  text-align: left;
+.attendance-day-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.attendance-day-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 0.72rem;
+  color: #9aa0a6;
   font-weight: 600;
-  min-width: 160px;
-  z-index: 1;
+}
+
+.attendance-day-num {
+  color: #1c1c1e;
 }
 
 .att-cell {
   cursor: pointer;
   color: #9aa0a6;
-  min-width: 32px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #eef0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
 }
 
 .att-cell.present {
-  background: rgba(76, 175, 80, 0.14);
+  background: rgba(76, 175, 80, 0.16);
   color: #2e7d32;
-  font-weight: 700;
 }
 
 .att-cell.absent {
-  background: rgba(244, 67, 54, 0.1);
+  background: rgba(244, 67, 54, 0.12);
   color: #d32f2f;
-  font-weight: 700;
+}
+
+.attendance-legend {
+  display: flex;
+  gap: 20px;
+  margin-top: 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.legend-item.present {
+  color: #2e7d32;
+}
+
+.legend-item.absent {
+  color: #d32f2f;
 }
 
 .pill-btn {

@@ -1,25 +1,30 @@
 <template>
   <ion-page>
-    <ion-tabs>
-      <ion-router-outlet></ion-router-outlet>
-      <ion-tab-bar slot="bottom">
-        <ion-tab-button v-for="tabItem in visibleTabs" :key="tabItem.key" :tab="tabItem.key" :href="tabItem.path">
-          <span class="tab-emoji">{{ tabItem.icon }}</span>
-          <ion-label>{{ tabItem.label }}</ion-label>
-        </ion-tab-button>
-      </ion-tab-bar>
-    </ion-tabs>
+    <ion-router-outlet></ion-router-outlet>
+    <div class="tab-bar">
+      <button
+        v-for="tabItem in visibleTabs"
+        :key="tabItem.key"
+        type="button"
+        class="tab-btn"
+        :class="{ active: $route.path === tabItem.path }"
+        @click="$router.push(tabItem.path)"
+      >
+        <span class="tab-emoji">{{ tabItem.icon }}</span>
+        <span class="tab-label">{{ tabItem.label }}</span>
+      </button>
+    </div>
   </ion-page>
 </template>
 
 <script>
-import { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet } from '@ionic/vue';
+import { IonPage, IonRouterOutlet } from '@ionic/vue';
 import { useAuthStore } from '@/stores/auth';
 import { useSectionsStore } from '@/stores/sections';
 
 export default {
   name: 'Tabs',
-  components: { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet },
+  components: { IonPage, IonRouterOutlet },
   computed: {
     // Bottom bar holds only the day-to-day business sections. Owner-only admin
     // screens (Касса/Настройки) and logout live in each page's header menu
@@ -33,23 +38,49 @@ export default {
         .map((s) => ({ key: s.key, path: `/tabs/${s.key}`, icon: s.icon, label: s.label }));
     },
   },
-  async mounted() {
-    // Force a refresh (not the cached load()) even though the router guard
-    // already loaded sections before this page rendered: ion-tab-bar only
-    // wires up each ion-tab-button's click handler inside its own updated()
-    // hook, never on mount. If `items` was already loaded and nothing
-    // changes visibleTabs after mount, ion-tab-bar never updates and the
-    // first tab click throws ("tabState.tabs is undefined") from Ionic's
-    // default no-op _getTabState. Reassigning `items` here guarantees at
-    // least one post-mount reactive update so the handler gets wired.
-    await useSectionsStore().load(true);
-  },
 }
 </script>
 
 <style scoped>
+/* ion-router-outlet defaults to position:absolute; inset:0 (it expects to be
+   the sole content of its parent) — override so it only fills the space
+   above the tab bar instead of covering it. */
+ion-router-outlet {
+  position: relative;
+  flex: 1;
+}
+
+.tab-bar {
+  display: flex;
+  border-top: 1px solid #e0e2e5;
+  background: #fff;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  padding: 6px 4px 8px;
+  color: #9aa0a6;
+}
+
+.tab-btn.active {
+  color: #2196f3;
+}
+
 .tab-emoji {
   font-size: 22px;
   line-height: 1;
+}
+
+.tab-label {
+  font-size: 0.7rem;
+  font-weight: 600;
 }
 </style>

@@ -1,8 +1,12 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import moment from 'moment';
+import 'moment/locale/ru';
 import App from './App.vue'
 import router from './router';
 import { useAuthStore } from './stores/auth';
+
+moment.locale('ru');
 
 import { IonicVue } from '@ionic/vue';
 import { defineCustomElements } from '@ionic/pwa-elements/loader';
