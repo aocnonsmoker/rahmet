@@ -57,7 +57,7 @@
             <template v-if="editingSection">
               <div class="new-section-row">
                 <div class="icon-field">
-                  <label class="icon-field-label">Значок</label>
+                  <label class="icon-field-label">Значок<span class="icon-field-optional">необязательно</span></label>
                   <input class="section-icon-input" type="text" maxlength="4" v-model="editingSection.icon" />
                 </div>
                 <div class="label-field">
@@ -132,7 +132,7 @@
           <ion-content class="ion-padding">
             <div class="new-section-row">
               <div class="icon-field">
-                <label class="icon-field-label">Значок</label>
+                <label class="icon-field-label">Значок<span class="icon-field-optional">необязательно</span></label>
                 <input class="section-icon-input" type="text" placeholder="🎤" maxlength="4" v-model="newSection.icon" />
               </div>
               <div class="label-field">
@@ -485,8 +485,8 @@ export default {
       }
     },
     async saveSectionEdit() {
-      if (!this.editingSection.label.trim() || !this.editingSection.icon.trim()) {
-        await showAlert('Заполните "Значок" и "Название"');
+      if (!this.editingSection.label.trim()) {
+        await showAlert('Заполните "Название"');
         return;
       }
       this.savingSectionEdit = true;
@@ -516,8 +516,8 @@ export default {
       }
     },
     async createSection() {
-      if (!this.newSection.label.trim() || !this.newSection.icon.trim()) {
-        await showAlert('Заполните "Значок" и "Название"');
+      if (!this.newSection.label.trim()) {
+        await showAlert('Заполните "Название"');
         return;
       }
       this.creatingSection = true;
@@ -885,11 +885,18 @@ export default {
 }
 
 .icon-field-label {
-  display: block;
+  display: flex;
+  flex-direction: column;
   font-weight: 700;
   font-size: 0.8rem;
   color: #1c1c1e;
   margin-bottom: 6px;
+}
+
+.icon-field-optional {
+  font-weight: 500;
+  font-size: 0.68rem;
+  color: #9aa0a6;
 }
 
 .label-field {

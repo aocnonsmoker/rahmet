@@ -166,6 +166,20 @@ export default {
       const enabled = sections.items.filter((s) => s.enabled);
       this.sectionsData = await Promise.all(
         enabled.map(async (s) => {
+          // Club sections never write to `records` — a membership's payment
+          // is the closest thing they have to one, so it's counted on the day
+          // it was paid (payment_date), same as any other same-day record.
+          if (s.template === 'club') {
+            const memberships = await apiFetch(`/memberships?section=${s.key}`);
+            const records = memberships
+              .filter((m) => m.payment_date)
+              // payment_date is a plain date (always midnight) — the day-bucketing
+              // below uses a 06:00-to-06:00 window (for overnight bookings), which
+              // would misfile a midnight timestamp into the *previous* day. Anchor
+              // it at noon instead so it always lands in its own calendar day.
+              .map((m) => ({ price: m.price, start: `${m.payment_date.split('T')[0]} 12:00`, end: null }));
+            return { key: s.key, label: s.label, icon: s.icon, template: s.template, records };
+          }
           const result = await apiFetch(`/records?section=${s.key}`);
           const records = result.map((r) => ({ ...r, start: this.formatDate(r.start), end: r.end ? this.formatDate(r.end) : null }));
           return { key: s.key, label: s.label, icon: s.icon, template: s.template, records };

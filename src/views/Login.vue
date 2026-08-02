@@ -2,7 +2,7 @@
   <ion-page>
     <ion-content :fullscreen="true" class="login-content">
       <div class="login-root">
-        <div class="login-card">
+        <form class="login-card" @submit.prevent="submit">
           <div class="login-title">Вход</div>
 
           <FormInput
@@ -29,10 +29,10 @@
 
           <div v-if="error" class="login-error">{{ error }}</div>
 
-          <ion-button expand="block" class="login-btn" :disabled="loading" @click="submit">
+          <ion-button type="submit" expand="block" class="login-btn" :disabled="loading">
             {{ loading ? 'Входим…' : 'Войти' }}
           </ion-button>
-        </div>
+        </form>
       </div>
     </ion-content>
   </ion-page>

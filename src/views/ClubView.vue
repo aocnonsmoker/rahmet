@@ -104,9 +104,17 @@
         <!-- ===================== Пробные занятия ===================== -->
         <div v-if="tab === 'trials'" class="panel">
           <ion-button v-if="canWrite" expand="block" class="add-btn" @click="openAddTrial">+ Записать на пробное</ion-button>
+          <button class="date-pill" type="button" @click="showTrialDateModal = true">{{ formattedTrialDate }}</button>
+          <ion-modal :keep-contents-mounted="true" :is-open="showTrialDateModal" @didDismiss="showTrialDateModal = false">
+            <MonthCalendar
+              :model-value="trialDate"
+              :events="trialLessonsForBadges"
+              @update:modelValue="onPickTrialDate"
+            />
+          </ion-modal>
           <div class="list-wrapper">
             <div class="records-scroll">
-              <div v-for="t in trialLessons" :key="t.id" class="record-card" @click="onTrialClick(t)">
+              <div v-for="t in trialLessonsForDay" :key="t.id" class="record-card" @click="onTrialClick(t)">
                 <div class="record-bar" :style="{ background: groupColor(t.resource_id) }"></div>
                 <div class="record-body">
                   <div class="record-title">{{ t.full_name }}</div>
@@ -116,7 +124,7 @@
                   <span class="status-badge" :class="t.status">{{ trialStatusLabel(t.status) }}</span>
                 </div>
               </div>
-              <div v-if="!trialLessons.length" class="empty-state">Нет записей на пробные занятия</div>
+              <div v-if="!trialLessonsForDay.length" class="empty-state">Нет записей на пробные занятия в этот день</div>
             </div>
           </div>
         </div>
@@ -202,6 +210,7 @@ import { refreshOutline } from 'ionicons/icons';
 import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
 import HeaderMenuButton from '@/components/HeaderMenuButton.vue';
+import MonthCalendar from '@/components/MonthCalendar.vue';
 import { apiFetch } from '@/services/api';
 import { showAlert, showConfirm } from '@/services/dialogs';
 import { useAuthStore } from '@/stores/auth';
@@ -219,7 +228,7 @@ const TRIAL_STATUS_LABELS = {
 
 export default {
   name: 'ClubView',
-  components: { IonContent, IonHeader, IonPage, IonToolbar, IonButton, IonModal, IonButtons, IonIcon, FormInput, FormSelect, HeaderMenuButton },
+  components: { IonContent, IonHeader, IonPage, IonToolbar, IonButton, IonModal, IonButtons, IonIcon, FormInput, FormSelect, HeaderMenuButton, MonthCalendar },
   props: {
     sectionKey: { type: String, required: true },
     label: { type: String, required: true },
@@ -240,6 +249,9 @@ export default {
       showTrialModal: false,
       editingTrialId: null,
       trialForm: null,
+
+      showTrialDateModal: false,
+      trialDate: moment().format('YYYY-MM-DD'),
 
       showTrainerModal: false,
       editingTrainerId: null,
@@ -269,6 +281,19 @@ export default {
     },
     trialStatusOptions() {
       return Object.entries(TRIAL_STATUS_LABELS).map(([value, label]) => ({ value, label }));
+    },
+    formattedTrialDate() {
+      const date = new Date(`${this.trialDate}T00:00:00`);
+      const str = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: '2-digit', month: 'long' }).format(date);
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    },
+    trialLessonsForBadges() {
+      return this.trialLessons.map((t) => ({ start: t.scheduled_at }));
+    },
+    trialLessonsForDay() {
+      return this.trialLessons
+        .filter((t) => t.scheduled_at.slice(0, 10) === this.trialDate)
+        .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
     },
     weekDays() {
       const start = moment(this.attendanceWeekStart, 'YYYY-MM-DD');
@@ -452,6 +477,10 @@ export default {
     },
 
     // ---------------- Пробные занятия ----------------
+    onPickTrialDate(date) {
+      this.trialDate = date;
+      this.showTrialDateModal = false;
+    },
     openAddTrial() {
       this.editingTrialId = null;
       this.trialForm = { full_name: '', phone: '+7', age: null, resource_id: null, scheduled_at: moment().format('YYYY-MM-DDTHH:mm') };
@@ -618,6 +647,19 @@ export default {
   margin: 0 2px 4px;
 }
 
+.date-pill {
+  display: inline-block;
+  border: none;
+  background: #eef0f0;
+  border-radius: 18px;
+  padding: 8px 18px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2b2f33;
+  cursor: pointer;
+  margin: 0 2px 12px;
+}
+
 .list-wrapper {
   flex: 1;
   min-height: 0;
@@ -706,10 +748,11 @@ export default {
 }
 
 .month-label {
-  flex: 1;
+  width: 210px;
   font-weight: 700;
   color: #1c1c1e;
   text-align: center;
+  white-space: nowrap;
 }
 
 .nav-arrow {

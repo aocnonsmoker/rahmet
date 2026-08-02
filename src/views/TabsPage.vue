@@ -75,8 +75,10 @@ ion-router-outlet {
 }
 
 .tab-emoji {
+  display: block;
   font-size: 22px;
-  line-height: 1;
+  line-height: 22px;
+  min-height: 22px;
 }
 
 .tab-label {
