@@ -7,6 +7,21 @@ const routes = [
     redirect: '/tabs/spa'
   },
   {
+    // Public QR menu — no login, not nested under the authenticated tab bar.
+    path: '/menu',
+    component: () => import('@/views/PublicMenu.vue')
+  },
+  {
+    // Menu admin — standalone, doesn't share the Баня/Автомойка/Гостиница tab bar.
+    path: '/menu-admin',
+    component: () => import('@/views/Menu.vue')
+  },
+  {
+    // Waiter order-taking — standalone, doesn't share the Баня/Автомойка/Гостиница tab bar.
+    path: '/orders',
+    component: () => import('@/views/Orders.vue')
+  },
+  {
     path: '/tabs/',
     component: TabsPage,
     children: [

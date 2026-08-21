@@ -4,7 +4,7 @@
       <ion-toolbar class="cash-toolbar">
         <div class="header-card">
           <div class="header-title">Касса</div>
-          <div class="header-total">Итого: {{ totalSpa + totalCar + totalPS + totalHotel }} тг.</div>
+          <div class="header-total">Итого: {{ totalSpa + totalCar + totalPS + totalHotel + totalRestaurant }} тг.</div>
           <button class="header-btn refresh" type="button" @click="refreshAll">
             <ion-icon :icon="refreshIcon"></ion-icon>
             Обновить
@@ -44,6 +44,10 @@
               <div class="totals-row">
                 <span class="totals-label"><span class="dot"></span>Гостиница</span>
                 <span class="totals-value">{{ totalHotel }} тг.</span>
+              </div>
+              <div class="totals-row">
+                <span class="totals-label"><span class="dot dot-restaurant"></span>Ресторан</span>
+                <span class="totals-value">{{ totalRestaurant }} тг.</span>
               </div>
             </div>
           </div>
@@ -86,9 +90,13 @@
                 <span class="totals-label"><span class="dot"></span>Гостиница</span>
                 <span class="totals-value">{{ analyticTotals.hotel }} тг.</span>
               </div>
+              <div class="totals-row">
+                <span class="totals-label"><span class="dot dot-restaurant"></span>Ресторан</span>
+                <span class="totals-value">{{ analyticTotals.restaurant }} тг.</span>
+              </div>
               <div class="totals-row totals-row-sum">
                 <span class="totals-label">Итого</span>
-                <span class="totals-value">{{ analyticTotals.spa + analyticTotals.car + analyticTotals.ps + analyticTotals.hotel }} тг.</span>
+                <span class="totals-value">{{ analyticTotals.spa + analyticTotals.car + analyticTotals.ps + analyticTotals.hotel + analyticTotals.restaurant }} тг.</span>
               </div>
             </div>
 
@@ -129,14 +137,16 @@ export default {
       events: [],
       pss: [],
       hotelEvents: [],
+      restaurantOrders: [],
       today: moment().format("YYYY-MM-DD"),
       totalSpa: 0,
       totalCar: 0,
       totalPS: 0,
       totalHotel: 0,
+      totalRestaurant: 0,
       analyticFrom: moment().startOf('month').format("YYYY-MM-DD"),
       analyticTo: moment().format("YYYY-MM-DD"),
-      analyticTotals: { spa: 0, car: 0, ps: 0, hotel: 0 },
+      analyticTotals: { spa: 0, car: 0, ps: 0, hotel: 0, restaurant: 0 },
       chartInstance: null,
       chartWidth: 300,
       chartHeight: 320,
@@ -152,7 +162,7 @@ export default {
       }).format(date);
     },
     allRecordsForBadges() {
-      return [...this.cars, ...this.events, ...this.hotelEvents];
+      return [...this.cars, ...this.events, ...this.hotelEvents, ...this.restaurantOrders];
     },
   },
   async mounted() {
@@ -181,6 +191,8 @@ export default {
           r => ({ ...r, start: this.formatDate(r.start), end: this.formatDate(r.end) })),
         this.fetchData('http://79.76.52.210:8000/events', 'events',
           r => ({ ...r, start: this.formatDate(r.start), end: this.formatDate(r.end) })),
+        this.fetchData('http://79.76.52.210:8000/restaurant-orders', 'restaurantOrders',
+          r => ({ ...r, start: this.formatDate(r.start) })),
       ]);
       this.sumTotal();
       if (this.tab === 2) this.buildAnalytic();
@@ -220,10 +232,11 @@ export default {
 
     sumTotal() {
       const range = this.getDayRange(this.today);
-      this.totalCar   = this.cars.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0);
-      this.totalPS    = this.pss.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0);
-      this.totalSpa   = this.events.filter(e => e.price && this.isInRange(e.start, range)).reduce((s, e) => s + e.price, 0);
-      this.totalHotel = this.hotelRevenueForDay(this.today);
+      this.totalCar        = this.cars.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0);
+      this.totalPS         = this.pss.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0);
+      this.totalSpa        = this.events.filter(e => e.price && this.isInRange(e.start, range)).reduce((s, e) => s + e.price, 0);
+      this.totalHotel      = this.hotelRevenueForDay(this.today);
+      this.totalRestaurant = this.restaurantOrders.filter(o => o.price && this.isInRange(o.start, range)).reduce((s, o) => s + o.price, 0);
     },
 
     buildAnalytic() {
@@ -236,26 +249,28 @@ export default {
       const end = moment(to);
       while (cur <= end) { days.push(cur.format('YYYY-MM-DD')); cur = cur.clone().add(1, 'days'); }
 
-      const daySpa = [], dayCar = [], dayPS = [], dayHotel = [];
+      const daySpa = [], dayCar = [], dayPS = [], dayHotel = [], dayRestaurant = [];
       for (const day of days) {
         const range = this.getDayRange(day);
         daySpa.push(this.events.filter(e => e.price && this.isInRange(e.start, range)).reduce((s, e) => s + e.price, 0));
         dayCar.push(this.cars.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0));
         dayPS.push(this.pss.filter(c => c.price && this.isInRange(c.start, range)).reduce((s, c) => s + c.price, 0));
         dayHotel.push(this.hotelRevenueForDay(day));
+        dayRestaurant.push(this.restaurantOrders.filter(o => o.price && this.isInRange(o.start, range)).reduce((s, o) => s + o.price, 0));
       }
 
       this.analyticTotals = {
-        spa:   daySpa.reduce((s, v) => s + v, 0),
-        car:   dayCar.reduce((s, v) => s + v, 0),
-        ps:    dayPS.reduce((s, v) => s + v, 0),
-        hotel: dayHotel.reduce((s, v) => s + v, 0),
+        spa:        daySpa.reduce((s, v) => s + v, 0),
+        car:        dayCar.reduce((s, v) => s + v, 0),
+        ps:         dayPS.reduce((s, v) => s + v, 0),
+        hotel:      dayHotel.reduce((s, v) => s + v, 0),
+        restaurant: dayRestaurant.reduce((s, v) => s + v, 0),
       };
 
       this.chartWidth = Math.max(300, days.length * 40);
 
       // Totals per day for label on top
-      const dayTotals = days.map((_, i) => daySpa[i] + dayCar[i] + dayPS[i] + dayHotel[i]);
+      const dayTotals = days.map((_, i) => daySpa[i] + dayCar[i] + dayPS[i] + dayHotel[i] + dayRestaurant[i]);
 
       const maxLabel = Math.max(...dayTotals).toLocaleString() + ' тг.';
       const labelPadding = maxLabel.length * 8 + 16;
@@ -297,9 +312,10 @@ export default {
           data: {
             labels: days.map(d => moment(d).format('DD.MM')),
             datasets: [
-              { label: 'Баня',      data: daySpa,   backgroundColor: 'rgba(112,192,245,0.8)' },
-              { label: 'Автомойка', data: dayCar,   backgroundColor: 'rgba(137,243,146,0.8)' },
-              { label: 'Гостиница', data: dayHotel, backgroundColor: 'rgba(186,104,200,0.8)' },
+              { label: 'Баня',      data: daySpa,        backgroundColor: 'rgba(112,192,245,0.8)' },
+              { label: 'Автомойка', data: dayCar,        backgroundColor: 'rgba(137,243,146,0.8)' },
+              { label: 'Гостиница', data: dayHotel,      backgroundColor: 'rgba(186,104,200,0.8)' },
+              { label: 'Ресторан',  data: dayRestaurant, backgroundColor: 'rgba(187,95,69,0.8)' },
             ],
           },
           options: {
@@ -465,6 +481,10 @@ export default {
   border-radius: 50%;
   background: #2196f3;
   margin-right: 8px;
+}
+
+.totals-label .dot-restaurant {
+  background: #bb5f45;
 }
 
 .totals-value {
