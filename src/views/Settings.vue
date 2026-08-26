@@ -98,7 +98,7 @@
 
               <template v-if="editingSection.template !== 'queue'">
                 <div class="resource-list">
-                  <div v-for="r in resources" :key="r.id" class="resource-row" :style="{ borderColor: r.color }">
+                  <div v-for="r in groupResources" :key="r.id" class="resource-row" :style="{ borderColor: r.color }">
                     <span class="resource-color" :style="{ background: r.color }"></span>
                     <div class="resource-row-label">
                       {{ r.label }}
@@ -109,7 +109,24 @@
                     </div>
                   </div>
                 </div>
-                <button class="add-section-btn" type="button" @click="openAddResource">+ Добавить</button>
+                <button class="add-section-btn" type="button" @click="openAddResource('group')">+ Добавить</button>
+              </template>
+
+              <template v-if="editingSection.template === 'club'">
+                <label class="icon-field-label">Залы</label>
+                <div class="resource-list">
+                  <div v-for="r in roomResources" :key="r.id" class="resource-row" :style="{ borderColor: r.color }">
+                    <div class="resource-row-label">
+                      {{ r.label }}
+                    </div>
+                    <div class="section-actions">
+                      <button class="icon-btn edit" type="button" @click="openEditResource(r)">Изменить</button>
+                      <button class="icon-btn danger" type="button" @click="removeResource(r)">Удалить</button>
+                    </div>
+                  </div>
+                  <div v-if="!roomResources.length" class="empty-hint">Залы не добавлены</div>
+                </div>
+                <button class="add-section-btn" type="button" @click="openAddResource('room')">+ Добавить зал</button>
               </template>
             </template>
           </ion-content>
@@ -201,18 +218,57 @@
                 :model-value="editingResource.label"
                 @update:modelValue="editingResource.label = $event"
               />
-              <label class="icon-field-label">Цвет</label>
-              <div class="color-picker">
+
+              <template v-if="editingSection && editingSection.template === 'club' && editingResource.kind !== 'room'">
+                <label class="icon-field-label">Расписание</label>
+                <div class="resource-list">
+                  <div v-for="sch in schedulesForResource(editingResource.id)" :key="sch.id" class="resource-row">
+                    <div class="resource-row-label">
+                      {{ dayTimesSummary(sch.day_times) }}
+                      <span class="resource-row-sub">{{ roomLabel(sch.room_id) }}</span>
+                    </div>
+                    <div class="section-actions">
+                      <button class="icon-btn edit" type="button" @click="openEditSchedule(sch)">Изменить</button>
+                      <button class="icon-btn danger" type="button" @click="removeSchedule(sch)">Удалить</button>
+                    </div>
+                  </div>
+                  <div v-if="!schedulesForResource(editingResource.id).length" class="empty-hint">Расписание не задано</div>
+                </div>
                 <button
-                  v-for="c in COLOR_CHOICES"
-                  :key="c"
+                  v-if="!schedulesForResource(editingResource.id).length"
+                  class="add-section-btn"
                   type="button"
-                  class="color-chip"
-                  :class="{ selected: editingResource.color === c }"
-                  :style="{ background: c }"
-                  @click="editingResource.color = c"
-                ></button>
-              </div>
+                  @click="openAddSchedule(editingResource.id)"
+                >+ Добавить расписание</button>
+              </template>
+            </template>
+          </ion-content>
+        </ion-modal>
+
+        <!-- Модальное окно расписания группы -->
+        <ion-modal class="section-modal" :is-open="showScheduleModal">
+          <ion-header class="section-modal-header ion-no-border">
+            <ion-toolbar class="section-modal-toolbar">
+              <ion-buttons slot="start">
+                <ion-button fill="clear" color="medium" @click="showScheduleModal = false">Отменить</ion-button>
+              </ion-buttons>
+              <ion-buttons slot="end">
+                <ion-button fill="clear" color="primary" :strong="true" :disabled="savingSchedule" @click="confirmSchedule">
+                  {{ savingSchedule ? 'Сохраняем…' : 'Сохранить' }}
+                </ion-button>
+              </ion-buttons>
+            </ion-toolbar>
+          </ion-header>
+          <ion-content class="ion-padding">
+            <template v-if="scheduleForm">
+              <FormSelect
+                label="Зал"
+                placeholder="Выберите зал"
+                :model-value="scheduleForm.room_id"
+                :options="roomOptions"
+                @update:modelValue="scheduleForm.room_id = $event"
+              />
+              <DayTimesPicker label="Дни и время" :model-value="scheduleForm.day_times" @update:modelValue="scheduleForm.day_times = $event" />
             </template>
           </ion-content>
         </ion-modal>
@@ -239,18 +295,17 @@
               :model-value="newResource.label"
               @update:modelValue="newResource.label = $event"
             />
-            <label class="icon-field-label">Цвет</label>
-            <div class="color-picker">
-              <button
-                v-for="c in COLOR_CHOICES"
-                :key="c"
-                type="button"
-                class="color-chip"
-                :class="{ selected: newResource.color === c }"
-                :style="{ background: c }"
-                @click="newResource.color = c"
-              ></button>
-            </div>
+            <template v-if="newResource.kind === 'group' && editingSection && editingSection.template === 'club'">
+              <label class="icon-field-label">Расписание</label>
+              <FormSelect
+                label="Зал"
+                placeholder="Выберите зал"
+                :model-value="newResource.room_id"
+                :options="roomOptions"
+                @update:modelValue="newResource.room_id = $event"
+              />
+              <DayTimesPicker :model-value="newResource.day_times" @update:modelValue="newResource.day_times = $event" />
+            </template>
           </ion-content>
         </ion-modal>
 
@@ -342,11 +397,13 @@
 import { IonPage, IonHeader, IonToolbar, IonContent, IonButton, IonModal, IonButtons } from '@ionic/vue';
 import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
+import DayTimesPicker from '@/components/DayTimesPicker.vue';
 import HeaderMenuButton from '@/components/HeaderMenuButton.vue';
 import { apiFetch } from '@/services/api';
 import { showAlert, showConfirm } from '@/services/dialogs';
 import { useSectionsStore } from '@/stores/sections';
 import { useViewportStore } from '@/stores/viewport';
+import { RU_DAYS_SHORT } from '@/utils/ruDate';
 
 const TEMPLATE_LABELS = {
   time_slot: 'Бронь по времени',
@@ -372,11 +429,10 @@ const COLOR_CHOICES = [
 
 export default {
   name: 'Settings',
-  components: { IonPage, IonHeader, IonToolbar, IonContent, IonButton, IonModal, IonButtons, FormInput, FormSelect, HeaderMenuButton },
+  components: { IonPage, IonHeader, IonToolbar, IonContent, IonButton, IonModal, IonButtons, FormInput, FormSelect, HeaderMenuButton, DayTimesPicker },
   data() {
     return {
       ICON_CHOICES,
-      COLOR_CHOICES,
       tab: 'sections',
 
       sectionsList: [],
@@ -395,8 +451,14 @@ export default {
       savingResource: false,
 
       showAddResource: false,
-      newResource: { label: '', color: '#2196f3' },
+      newResource: { label: '' },
       creatingResources: false,
+
+      schedules: [],
+      showScheduleModal: false,
+      editingScheduleId: null,
+      scheduleForm: null,
+      savingSchedule: false,
 
       staff: [],
       showAddStaff: false,
@@ -449,6 +511,15 @@ export default {
     activeStaff() {
       return this.staff.filter((u) => u.is_active);
     },
+    groupResources() {
+      return this.resources.filter((r) => r.kind !== 'room');
+    },
+    roomResources() {
+      return this.resources.filter((r) => r.kind === 'room');
+    },
+    roomOptions() {
+      return this.roomResources.map((r) => ({ value: r.id, label: r.label }));
+    },
   },
   async mounted() {
     await this.loadSections();
@@ -482,6 +553,7 @@ export default {
       if (s.template !== 'queue') {
         this.resourceSection = s.key;
         await this.loadResources();
+        if (s.template === 'club') await this.loadSchedules();
       }
     },
     async saveSectionEdit() {
@@ -569,8 +641,81 @@ export default {
       await apiFetch(`/resources/${r.id}`, { method: 'DELETE' });
       this.resources = this.resources.filter((x) => x.id !== r.id);
     },
-    openAddResource() {
-      this.newResource = { label: '', color: '#2196f3' };
+
+    // ---------------- Расписание группы ----------------
+    async loadSchedules() {
+      this.schedules = await apiFetch(`/group_schedules?section=${this.resourceSection}`);
+    },
+    schedulesForResource(resourceId) {
+      return this.schedules.filter((s) => s.resource_id === resourceId);
+    },
+    roomLabel(roomId) {
+      const r = this.roomResources.find((item) => item.id === roomId);
+      return r ? r.label : '—';
+    },
+    formatTime(t) {
+      return t ? t.slice(0, 5) : '';
+    },
+    dayTimesSummary(dayTimes) {
+      if (!dayTimes || !dayTimes.length) return '—';
+      return [...dayTimes]
+        .sort((a, b) => a.day - b.day)
+        .map((dt) => `${RU_DAYS_SHORT[dt.day]} ${this.formatTime(dt.start_time)}–${this.formatTime(dt.end_time)}`)
+        .join(', ');
+    },
+    openAddSchedule(resourceId) {
+      this.editingScheduleId = null;
+      this.scheduleForm = {
+        resource_id: resourceId,
+        room_id: this.roomResources.length ? this.roomResources[0].id : null,
+        day_times: [],
+      };
+      this.showScheduleModal = true;
+    },
+    openEditSchedule(s) {
+      this.editingScheduleId = s.id;
+      this.scheduleForm = {
+        resource_id: s.resource_id,
+        room_id: s.room_id,
+        day_times: s.day_times.map((dt) => ({ ...dt })),
+      };
+      this.showScheduleModal = true;
+    },
+    async confirmSchedule() {
+      if (
+        !this.scheduleForm.room_id
+        || !this.scheduleForm.day_times.length
+        || this.scheduleForm.day_times.some((dt) => !dt.start_time || !dt.end_time)
+      ) {
+        await showAlert('Заполните зал и время для каждого выбранного дня');
+        return;
+      }
+      this.savingSchedule = true;
+      try {
+        const body = { ...this.scheduleForm };
+        const url = this.editingScheduleId
+          ? `/group_schedules/${this.editingScheduleId}?section=${this.resourceSection}`
+          : `/group_schedules?section=${this.resourceSection}`;
+        await apiFetch(url, { method: this.editingScheduleId ? 'PUT' : 'POST', body });
+        this.showScheduleModal = false;
+        await this.loadSchedules();
+      } finally {
+        this.savingSchedule = false;
+      }
+    },
+    async removeSchedule(s) {
+      const ok = await showConfirm('Удалить это расписание?', { header: 'Удаление', confirmText: 'Удалить' });
+      if (!ok) return;
+      await apiFetch(`/group_schedules/${s.id}?section=${this.resourceSection}`, { method: 'DELETE' });
+      this.schedules = this.schedules.filter((x) => x.id !== s.id);
+    },
+    openAddResource(kind) {
+      this.newResource = {
+        label: '',
+        kind,
+        room_id: this.roomResources.length ? this.roomResources[0].id : null,
+        day_times: [],
+      };
       this.showAddResource = true;
     },
     async addResources() {
@@ -578,7 +723,8 @@ export default {
         await showAlert('Заполните "Название"');
         return;
       }
-      const startOrder = this.resources.length ? Math.max(...this.resources.map((r) => r.sort_order)) : 0;
+      const sameKind = this.resources.filter((r) => r.kind === this.newResource.kind);
+      const startOrder = sameKind.length ? Math.max(...sameKind.map((r) => r.sort_order)) : 0;
       this.creatingResources = true;
       try {
         const created = await apiFetch('/resources', {
@@ -586,11 +732,28 @@ export default {
           body: {
             section: this.resourceSection,
             label: this.newResource.label.trim(),
-            color: this.newResource.color,
+            color: COLOR_CHOICES[sameKind.length % COLOR_CHOICES.length],
             sort_order: startOrder + 1,
+            kind: this.newResource.kind,
           },
         });
         this.resources.push(created);
+        if (
+          this.newResource.kind === 'group'
+          && this.newResource.room_id
+          && this.newResource.day_times.length
+          && !this.newResource.day_times.some((dt) => !dt.start_time || !dt.end_time)
+        ) {
+          await apiFetch(`/group_schedules?section=${this.resourceSection}`, {
+            method: 'POST',
+            body: {
+              resource_id: created.id,
+              room_id: this.newResource.room_id,
+              day_times: this.newResource.day_times,
+            },
+          });
+          await this.loadSchedules();
+        }
         this.showAddResource = false;
       } finally {
         this.creatingResources = false;
@@ -925,27 +1088,6 @@ export default {
   box-shadow: 0 0 0 2px #2196f3 inset;
 }
 
-.color-picker {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.color-chip {
-  width: 100%;
-  aspect-ratio: 1;
-  border: none;
-  border-radius: 50%;
-  padding: 0;
-  cursor: pointer;
-  box-shadow: 0 0 0 2px #fff inset;
-}
-
-.color-chip.selected {
-  box-shadow: 0 0 0 2px #fff inset, 0 0 0 3px #1c1c1e;
-}
-
 .resource-list {
   display: flex;
   flex-direction: column;
@@ -976,6 +1118,13 @@ export default {
   font-weight: 400;
   font-size: 0.8rem;
   color: #6a6f75;
+}
+
+.empty-hint {
+  text-align: center;
+  color: #9aa0a6;
+  font-size: 0.85rem;
+  padding: 10px 0;
 }
 
 .resource-color {

@@ -1,4 +1,4 @@
-import { alertController } from '@ionic/vue';
+import { alertController, toastController } from '@ionic/vue';
 
 // Ionic-styled replacements for the native window.alert/window.confirm,
 // matching the look of the logout confirmation in HeaderMenuButton.vue.
@@ -11,6 +11,17 @@ export async function showAlert(message, header = '') {
   });
   await alert.present();
   await alert.onDidDismiss();
+}
+
+export async function showToast(message, { color = 'warning', duration = 6000 } = {}) {
+  const toast = await toastController.create({
+    message,
+    duration,
+    color,
+    position: 'top',
+    buttons: [{ text: '✕', role: 'cancel' }],
+  });
+  await toast.present();
 }
 
 export async function showConfirm(message, { header = '', confirmText = 'Да', cancelText = 'Отмена', destructive = true } = {}) {

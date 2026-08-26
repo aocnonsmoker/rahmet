@@ -26,10 +26,18 @@
       </DesktopModal>
 
       <div class="totals-list">
-        <div v-for="s in sectionsData" :key="s.key" class="totals-row">
-          <span class="totals-label"><span class="dot"></span>{{ s.icon }} {{ s.label }}</span>
-          <span class="totals-value">{{ (todayTotals[s.key] || 0).toLocaleString() }} тг.</span>
-        </div>
+        <template v-for="s in sectionsData" :key="s.key">
+          <template v-if="s.template === 'club'">
+            <div v-for="g in s.groups" :key="`${s.key}-${g.id}`" class="totals-row">
+              <span class="totals-label"><span class="dot" :style="{ background: g.color }"></span>{{ s.icon }} {{ g.label }}</span>
+              <span class="totals-value">{{ ((todayGroupTotals[s.key] && todayGroupTotals[s.key][g.id]) || 0).toLocaleString() }} тг.</span>
+            </div>
+          </template>
+          <div v-else class="totals-row">
+            <span class="totals-label"><span class="dot"></span>{{ s.icon }} {{ s.label }}</span>
+            <span class="totals-value">{{ (todayTotals[s.key] || 0).toLocaleString() }} тг.</span>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -54,8 +62,8 @@
       </div>
 
       <div class="totals-list">
-        <div v-for="s in sectionsData" :key="s.key" class="totals-row">
-          <span class="totals-label"><span class="dot"></span>{{ s.icon }} {{ s.label }}</span>
+        <div v-for="s in analyticSeries" :key="s.key" class="totals-row">
+          <span class="totals-label"><span class="dot" :style="s.color ? { background: s.color } : null"></span>{{ s.icon }} {{ s.label }}</span>
           <span class="totals-value">{{ (analyticTotals[s.key] || 0).toLocaleString() }} тг.</span>
         </div>
         <div class="totals-row totals-row-sum">
@@ -103,9 +111,11 @@ export default {
       sectionsData: [],
       today: moment().format('YYYY-MM-DD'),
       todayTotals: {},
+      todayGroupTotals: {},
       analyticFrom: moment().startOf('month').format('YYYY-MM-DD'),
       analyticTo: moment().format('YYYY-MM-DD'),
       analyticTotals: {},
+      analyticSeries: [],
       chartInstance: null,
       chartWidth: 600,
       chartHeight: 320,
@@ -170,15 +180,19 @@ export default {
           // is the closest thing they have to one, so it's counted on the day
           // it was paid (payment_date), same as any other same-day record.
           if (s.template === 'club') {
-            const memberships = await apiFetch(`/memberships?section=${s.key}`);
+            const [memberships, resources] = await Promise.all([
+              apiFetch(`/memberships?section=${s.key}`),
+              apiFetch(`/resources?section=${s.key}`),
+            ]);
+            const groups = resources.filter((r) => r.kind !== 'room');
             const records = memberships
               .filter((m) => m.payment_date)
               // payment_date is a plain date (always midnight) — the day-bucketing
               // below uses a 06:00-to-06:00 window (for overnight bookings), which
               // would misfile a midnight timestamp into the *previous* day. Anchor
               // it at noon instead so it always lands in its own calendar day.
-              .map((m) => ({ price: m.price, start: `${m.payment_date.split('T')[0]} 12:00`, end: null }));
-            return { key: s.key, label: s.label, icon: s.icon, template: s.template, records };
+              .map((m) => ({ price: m.price, start: `${m.payment_date.split('T')[0]} 12:00`, end: null, resource_id: m.resource_ids[0] || null }));
+            return { key: s.key, label: s.label, icon: s.icon, template: s.template, records, groups };
           }
           const result = await apiFetch(`/records?section=${s.key}`);
           const records = result.map((r) => ({ ...r, start: this.formatDate(r.start), end: r.end ? this.formatDate(r.end) : null }));
@@ -222,12 +236,50 @@ export default {
       const range = this.getDayRange(day);
       return section.records.filter((r) => r.price && this.isInRange(r.start, range)).reduce((sum, r) => sum + r.price, 0);
     },
+    revenueForDayByResource(section, day, resourceId) {
+      const range = this.getDayRange(day);
+      return section.records
+        .filter((r) => r.price && r.resource_id === resourceId && this.isInRange(r.start, range))
+        .reduce((sum, r) => sum + r.price, 0);
+    },
+    hexToRgba(hex, alpha) {
+      const h = hex.replace('#', '');
+      const bigint = parseInt(h, 16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    },
+    // Flattens club sections into one series per group (Бокс/Йога/...) and
+    // keeps other sections as a single series — same breakdown as the
+    // Касса tab's daily totals, applied to the period view + chart.
+    buildAnalyticSeries() {
+      const series = [];
+      for (const section of this.sectionsData) {
+        if (section.template === 'club') {
+          for (const g of section.groups) {
+            series.push({ key: `${section.key}:${g.id}`, label: g.label, icon: section.icon, color: g.color, section, groupId: g.id });
+          }
+        } else {
+          series.push({ key: section.key, label: section.label, icon: section.icon, color: null, section, groupId: null });
+        }
+      }
+      return series;
+    },
     sumTotals() {
       const totals = {};
+      const groupTotals = {};
       for (const section of this.sectionsData) {
         totals[section.key] = this.revenueForDay(section, this.today);
+        if (section.template === 'club') {
+          groupTotals[section.key] = {};
+          for (const g of section.groups) {
+            groupTotals[section.key][g.id] = this.revenueForDayByResource(section, this.today, g.id);
+          }
+        }
       }
       this.todayTotals = totals;
+      this.todayGroupTotals = groupTotals;
     },
     buildAnalytic() {
       const from = this.analyticFrom;
@@ -241,18 +293,23 @@ export default {
         cur = cur.clone().add(1, 'days');
       }
 
-      const dailyBySection = {};
-      for (const section of this.sectionsData) {
-        dailyBySection[section.key] = days.map((day) => this.revenueForDay(section, day));
+      const series = this.buildAnalyticSeries();
+      this.analyticSeries = series;
+
+      const dailyBySeries = {};
+      for (const s of series) {
+        dailyBySeries[s.key] = days.map((day) => (
+          s.groupId != null ? this.revenueForDayByResource(s.section, day, s.groupId) : this.revenueForDay(s.section, day)
+        ));
       }
 
       const totals = {};
-      for (const section of this.sectionsData) {
-        totals[section.key] = dailyBySection[section.key].reduce((s, v) => s + v, 0);
+      for (const s of series) {
+        totals[s.key] = dailyBySeries[s.key].reduce((sum, v) => sum + v, 0);
       }
       this.analyticTotals = totals;
 
-      const dayTotals = days.map((_, i) => this.sectionsData.reduce((sum, s) => sum + dailyBySection[s.key][i], 0));
+      const dayTotals = days.map((_, i) => series.reduce((sum, s) => sum + dailyBySeries[s.key][i], 0));
 
       const maxLabel = Math.max(0, ...dayTotals).toLocaleString() + ' тг.';
       const labelPadding = maxLabel.length * 8 + 16;
@@ -299,10 +356,10 @@ export default {
             type: 'bar',
             data: {
               labels: days.map((d) => moment(d).format('DD.MM')),
-              datasets: this.sectionsData.map((s, i) => ({
+              datasets: series.map((s, i) => ({
                 label: s.label,
-                data: dailyBySection[s.key],
-                backgroundColor: CHART_PALETTE[i % CHART_PALETTE.length],
+                data: dailyBySeries[s.key],
+                backgroundColor: s.color ? this.hexToRgba(s.color, 0.8) : CHART_PALETTE[i % CHART_PALETTE.length],
               })),
             },
             options: {

@@ -6,38 +6,45 @@
         <ion-icon :icon="refreshIcon"></ion-icon>
         Обновить
       </button>
-      <button v-if="tab === 'clients' && canWrite" class="primary-btn" type="button" @click="openAddMembership">+ Добавить клиента</button>
+      <FormSelect
+        class="header-group-filter"
+        placeholder="Все секции"
+        :model-value="selectedGroupId"
+        :options="groupFilterOptions"
+        @update:modelValue="selectedGroupId = $event"
+      />
+      <button v-if="tab === 'clients' && canWrite" class="primary-btn" type="button" @click="openAddClient">+ Добавить клиента</button>
       <button v-if="tab === 'trials' && canWrite" class="primary-btn" type="button" @click="openAddTrial">+ Записать на пробное</button>
       <button v-if="tab === 'trainers' && canWrite" class="primary-btn" type="button" @click="openAddTrainer">+ Добавить тренера</button>
     </div>
 
     <div class="tabs-row">
+      <button class="tab-btn" :class="{ active: tab === 'schedule' }" type="button" @click="tab = 'schedule'">Расписание</button>
       <button class="tab-btn" :class="{ active: tab === 'clients' }" type="button" @click="tab = 'clients'">Клиенты</button>
       <button class="tab-btn" :class="{ active: tab === 'trainers' }" type="button" @click="tab = 'trainers'">Тренеры</button>
-      <button class="tab-btn" :class="{ active: tab === 'attendance' }" type="button" @click="tab = 'attendance'">Посещаемость</button>
+      <button class="tab-btn" :class="{ active: tab === 'attendance' }" type="button" @click="tab = 'attendance'">Журнал</button>
       <button class="tab-btn" :class="{ active: tab === 'trials' }" type="button" @click="tab = 'trials'">Пробные</button>
     </div>
 
     <!-- ===================== Клиенты / абонементы ===================== -->
     <div v-if="tab === 'clients'" class="tab-panel wide">
       <div class="cards-grid">
-        <div v-for="m in memberships" :key="m.id" class="record-card" @click="onMembershipClick(m)">
-          <div class="record-bar" :style="{ background: groupColor(m.resource_ids[0]) }"></div>
+        <div v-for="c in visibleClients" :key="c.id" class="record-card" @click="onClientClick(c)">
+          <div class="record-bar" :style="{ background: clientBarColor(c.id) }"></div>
           <div class="record-body">
-            <div class="record-title">{{ m.full_name }}</div>
-            <div class="record-sub">{{ groupLabels(m.resource_ids) }} · {{ m.phone }}</div>
-            <div class="record-sub">Абонемент: {{ formatDate(m.start_date) }} – {{ formatDate(m.end_date) }}</div>
-            <span class="status-badge" :class="m.status">{{ membershipStatusLabel(m.status) }}</span>
+            <div class="record-title">{{ c.full_name }}</div>
+            <div class="record-sub">{{ c.phone }}<span v-if="c.age"> · {{ c.age }} лет</span></div>
+            <div class="record-sub">{{ clientActiveSummary(c.id) }}</div>
           </div>
         </div>
-        <div v-if="!memberships.length" class="empty-state">Нет клиентов</div>
+        <div v-if="!visibleClients.length" class="empty-state">{{ selectedGroupId ? 'Нет клиентов в этой секции' : 'Нет клиентов' }}</div>
       </div>
     </div>
 
     <!-- ===================== Тренеры ===================== -->
     <div v-if="tab === 'trainers'" class="tab-panel wide">
       <div class="cards-grid">
-        <div v-for="t in trainers" :key="t.id" class="record-card" @click="onTrainerClick(t)">
+        <div v-for="t in visibleTrainers" :key="t.id" class="record-card" @click="onTrainerClick(t)">
           <div class="record-bar"></div>
           <div class="record-body">
             <div class="record-title">{{ t.full_name }}</div>
@@ -45,11 +52,24 @@
             <div class="record-sub">{{ groupLabels(t.resource_ids) }}</div>
           </div>
         </div>
-        <div v-if="!trainers.length" class="empty-state">Нет тренеров</div>
+        <div v-if="!visibleTrainers.length" class="empty-state">{{ selectedGroupId ? 'Нет тренеров в этой секции' : 'Нет тренеров' }}</div>
       </div>
     </div>
 
-    <!-- ===================== Посещаемость ===================== -->
+    <!-- ===================== Расписание ===================== -->
+    <div v-if="tab === 'schedule'" class="tab-panel wide">
+      <ScheduleCalendar
+        :schedules="schedules"
+        :groups="groups"
+        :rooms="rooms"
+        :selected-group-id="selectedGroupId"
+        active-view="week"
+        :time-cell-height="40"
+        @edit-schedule="onScheduleClick"
+      />
+    </div>
+
+    <!-- ===================== Журнал ===================== -->
     <div v-if="tab === 'attendance'" class="tab-panel wide">
       <div class="attendance-controls">
         <FormSelect
@@ -60,31 +80,40 @@
           @update:modelValue="onGroupChange"
         />
         <div v-if="attendanceGroupId" class="month-nav">
-          <button class="nav-arrow" type="button" @click="prevWeek">‹</button>
-          <div class="month-label">{{ weekLabel }}</div>
-          <button class="nav-arrow" type="button" @click="nextWeek">›</button>
+          <button class="nav-arrow" type="button" @click="prevMonth">‹</button>
+          <div class="month-label">{{ monthLabel }}</div>
+          <button class="nav-arrow" type="button" @click="nextMonth">›</button>
         </div>
       </div>
       <template v-if="attendanceGroupId">
-        <div class="attendance-cards">
-          <div v-for="m in attendanceMemberships" :key="m.id" class="attendance-card">
-            <div class="attendance-card-name">{{ m.full_name }}</div>
-            <div class="attendance-days">
-              <div v-for="d in weekDays" :key="d.date" class="attendance-day-col">
-                <div class="attendance-day-label">
-                  <span class="attendance-day-name">{{ d.name }}</span>
-                  <span class="attendance-day-num">{{ d.num }}</span>
-                </div>
-                <div
-                  class="att-cell"
-                  :class="attendanceCellClass(m.id, d.date)"
-                  @click="toggleAttendance(m.id, d.date)"
-                >{{ attendanceCellMark(m.id, d.date) }}</div>
-              </div>
-            </div>
-          </div>
-          <div v-if="!attendanceMemberships.length" class="empty-state">В этой группе нет клиентов</div>
+        <div v-if="attendanceMemberships.length" class="attendance-table-wrap">
+          <table class="attendance-table">
+            <thead>
+              <tr>
+                <th class="att-name-col"></th>
+                <th v-for="d in attendanceDays" :key="d.date" class="att-day-col">
+                  <div class="attendance-day-label">
+                    <span class="attendance-day-name">{{ d.name }}</span>
+                    <span class="attendance-day-num">{{ d.num }}</span>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="m in attendanceMemberships" :key="m.id">
+                <td class="att-name-col">{{ m.full_name }}</td>
+                <td v-for="d in attendanceDays" :key="d.date" class="att-day-col">
+                  <div
+                    class="att-cell"
+                    :class="attendanceCellClass(m.id, d.date)"
+                    @click="toggleAttendance(m.id, d.date)"
+                  >{{ attendanceCellMark(m.id, d.date) }}</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+        <div v-else class="empty-state">В этой группе нет клиентов</div>
         <div v-if="attendanceMemberships.length" class="attendance-legend">
           <span class="legend-item present">✓ Был</span>
           <span class="legend-item absent">✕ Пропуск</span>
@@ -115,21 +144,49 @@
     </div>
 
     <!-- Модальное окно клиента -->
-    <DesktopModal v-model="showMembershipModal" :title="editingMembershipId ? 'Клиент' : 'Новый клиент'">
+    <DesktopModal v-model="showClientModal" :title="editingClientId ? 'Клиент' : 'Новый клиент'">
+      <template v-if="clientForm">
+        <FormInput label="ФИО" type="text" :model-value="clientForm.full_name" @update:modelValue="clientForm.full_name = $event" />
+        <FormInput label="Телефон" type="tel" :model-value="clientForm.phone" @update:modelValue="clientForm.phone = $event" />
+        <FormInput label="Возраст" type="number" :model-value="clientForm.age" @update:modelValue="clientForm.age = $event" />
+        <FormInput label="ФИО родителя/опекуна" type="text" :model-value="clientForm.parent_name" @update:modelValue="clientForm.parent_name = $event" />
+
+        <template v-if="editingClientId">
+          <div class="section-title">Абонементы</div>
+          <div class="client-memberships">
+            <div v-for="m in clientMemberships(editingClientId)" :key="m.id" class="record-card" @click="onMembershipClick(m)">
+              <div class="record-bar" :style="{ background: groupColor(m.resource_ids[0]) }"></div>
+              <div class="record-body">
+                <div class="record-title">{{ groupLabels(m.resource_ids) }}</div>
+                <div class="record-sub">Абонемент: {{ formatDate(m.start_date) }} – {{ formatDate(m.end_date) }}<span v-if="m.contract_number"> · №{{ m.contract_number }}</span></div>
+                <span class="status-badge" :class="effectiveStatus(m)">{{ membershipStatusLabel(effectiveStatus(m)) }}</span>
+              </div>
+            </div>
+            <div v-if="!clientMemberships(editingClientId).length" class="empty-state">Нет абонементов</div>
+          </div>
+          <button class="pill-btn success add-membership-btn" type="button" @click="openAddMembershipForClient">+ Добавить абонемент</button>
+        </template>
+      </template>
+      <template #footer>
+        <button v-if="editingClientId" class="pill-btn danger" type="button" @click="deleteClient">Удалить клиента</button>
+        <button class="pill-btn ghost" type="button" @click="showClientModal = false">Отменить</button>
+        <button class="pill-btn primary" type="button" @click="confirmClient">Сохранить</button>
+      </template>
+    </DesktopModal>
+
+    <!-- Модальное окно абонемента -->
+    <DesktopModal v-model="showMembershipModal" :title="editingMembershipId ? 'Абонемент' : 'Новый абонемент'">
       <template v-if="membershipForm">
-        <FormInput label="ФИО" type="text" :model-value="membershipForm.full_name" @update:modelValue="membershipForm.full_name = $event" />
-        <FormInput label="Телефон" type="tel" :model-value="membershipForm.phone" @update:modelValue="membershipForm.phone = $event" />
-        <FormInput label="Возраст" type="number" :model-value="membershipForm.age" @update:modelValue="membershipForm.age = $event" />
-        <FormInput label="ФИО родителя/опекуна" type="text" :model-value="membershipForm.parent_name" @update:modelValue="membershipForm.parent_name = $event" />
-        <FormSelect label="Группы" placeholder="Выберите группы" multiple :model-value="membershipForm.resource_ids" :options="groupOptions" @update:modelValue="membershipForm.resource_ids = $event" />
+        <FormInput label="Номер договора" type="text" :model-value="membershipForm.contract_number" @update:modelValue="membershipForm.contract_number = $event" />
+        <FormSelect label="Группа" placeholder="Выберите группу" :model-value="membershipForm.resource_ids[0] || null" :options="groupOptions" @update:modelValue="membershipForm.resource_ids = $event ? [$event] : []" />
         <FormInput label="Дата оплаты" type="date" :model-value="membershipForm.payment_date" @update:modelValue="membershipForm.payment_date = $event" />
         <FormInput label="Абонемент с" type="date" :model-value="membershipForm.start_date" @update:modelValue="membershipForm.start_date = $event" />
         <FormInput label="Абонемент по" type="date" :model-value="membershipForm.end_date" @update:modelValue="membershipForm.end_date = $event" />
         <FormInput label="Сумма" type="number" suffix="тг." :model-value="membershipForm.price" @update:modelValue="membershipForm.price = $event" />
         <FormSelect label="Статус" :model-value="membershipForm.status" :options="membershipStatusOptions" @update:modelValue="membershipForm.status = $event" />
+        <button v-if="editingMembershipId" class="pill-btn danger" type="button" @click="deleteMembership">Удалить абонемент</button>
       </template>
       <template #footer>
-        <button v-if="editingMembershipId" class="pill-btn danger" type="button" @click="deleteMembership">Удалить</button>
         <button class="pill-btn ghost" type="button" @click="showMembershipModal = false">Отменить</button>
         <button class="pill-btn primary" type="button" @click="confirmMembership">Сохранить</button>
       </template>
@@ -165,6 +222,20 @@
         <button class="pill-btn primary" type="button" @click="confirmTrainer">Сохранить</button>
       </template>
     </DesktopModal>
+
+    <!-- Модальное окно расписания -->
+    <DesktopModal v-model="showScheduleModal" :title="editingScheduleId ? 'Расписание' : 'Новое расписание'">
+      <template v-if="scheduleForm">
+        <FormSelect label="Группа" placeholder="Выберите группу" :model-value="scheduleForm.resource_id" :options="plainGroupOptions" :disabled="!!editingScheduleId" @update:modelValue="scheduleForm.resource_id = $event" />
+        <FormSelect label="Зал" placeholder="Выберите зал" :model-value="scheduleForm.room_id" :options="roomOptions" @update:modelValue="scheduleForm.room_id = $event" />
+        <DayTimesPicker label="Дни и время" :model-value="scheduleForm.day_times" @update:modelValue="scheduleForm.day_times = $event" />
+      </template>
+      <template #footer>
+        <button v-if="editingScheduleId" class="pill-btn danger" type="button" @click="deleteSchedule">Удалить</button>
+        <button class="pill-btn ghost" type="button" @click="showScheduleModal = false">Отменить</button>
+        <button class="pill-btn primary" type="button" @click="confirmSchedule">Сохранить</button>
+      </template>
+    </DesktopModal>
   </ion-page>
 </template>
 
@@ -176,10 +247,12 @@ import DesktopModal from '@/components/desktop/DesktopModal.vue';
 import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
 import MonthCalendar from '@/components/MonthCalendar.vue';
+import ScheduleCalendar from '@/components/ScheduleCalendar.vue';
+import DayTimesPicker from '@/components/DayTimesPicker.vue';
 import { apiFetch } from '@/services/api';
-import { showAlert, showConfirm } from '@/services/dialogs';
+import { showAlert, showConfirm, showToast } from '@/services/dialogs';
 import { useAuthStore } from '@/stores/auth';
-import { ruDayShort, ruMonthGenitive } from '@/utils/ruDate';
+import { ruDayShort } from '@/utils/ruDate';
 
 const MEMBERSHIP_STATUS_LABELS = { active: 'Активен', expired: 'Закончился', frozen: 'Заморожен' };
 const TRIAL_STATUS_LABELS = {
@@ -193,7 +266,7 @@ const TRIAL_STATUS_LABELS = {
 
 export default {
   name: 'DesktopClubView',
-  components: { IonPage, IonIcon, DesktopModal, FormInput, FormSelect, MonthCalendar },
+  components: { IonPage, IonIcon, DesktopModal, FormInput, FormSelect, MonthCalendar, ScheduleCalendar, DayTimesPicker },
   props: {
     sectionKey: { type: String, required: true },
     label: { type: String, required: true },
@@ -201,14 +274,27 @@ export default {
   data() {
     return {
       refreshIcon: refreshOutline,
-      tab: 'clients',
+      tab: 'schedule',
+      selectedGroupId: null,
       groups: [],
+      rooms: [],
       trainers: [],
+      clients: [],
       memberships: [],
       trialLessons: [],
+      schedules: [],
+
+      showScheduleModal: false,
+      editingScheduleId: null,
+      scheduleForm: null,
+
+      showClientModal: false,
+      editingClientId: null,
+      clientForm: null,
 
       showMembershipModal: false,
       editingMembershipId: null,
+      membershipClientId: null,
       membershipForm: null,
 
       showTrialModal: false,
@@ -223,7 +309,7 @@ export default {
       trainerForm: null,
 
       attendanceGroupId: null,
-      attendanceWeekStart: moment().startOf('isoWeek').format('YYYY-MM-DD'),
+      attendanceMonth: moment().format('YYYY-MM'),
       attendanceMemberships: [],
       attendanceMarks: [],
     };
@@ -240,6 +326,17 @@ export default {
     },
     plainGroupOptions() {
       return this.groups.map((g) => ({ value: g.id, label: g.label }));
+    },
+    groupFilterOptions() {
+      return [{ value: null, label: 'Все секции' }, ...this.groups.map((g) => ({ value: g.id, label: g.label, color: g.color }))];
+    },
+    visibleClients() {
+      if (!this.selectedGroupId) return this.clients;
+      return this.clients.filter((c) => this.clientMemberships(c.id).some((m) => m.resource_ids.includes(this.selectedGroupId)));
+    },
+    visibleTrainers() {
+      if (!this.selectedGroupId) return this.trainers;
+      return this.trainers.filter((t) => t.resource_ids.includes(this.selectedGroupId));
     },
     membershipStatusOptions() {
       return Object.entries(MEMBERSHIP_STATUS_LABELS).map(([value, label]) => ({ value, label }));
@@ -258,41 +355,85 @@ export default {
     trialLessonsForDay() {
       return this.trialLessons
         .filter((t) => t.scheduled_at.slice(0, 10) === this.trialDate)
+        .filter((t) => !this.selectedGroupId || t.resource_id === this.selectedGroupId)
         .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
     },
-    weekDays() {
-      const start = moment(this.attendanceWeekStart, 'YYYY-MM-DD');
-      return Array.from({ length: 7 }, (_, i) => {
-        const d = start.clone().add(i, 'days');
-        return { date: d.format('YYYY-MM-DD'), num: d.date(), name: ruDayShort(d) };
-      });
+    roomOptions() {
+      return this.rooms.map((r) => ({ value: r.id, label: r.label }));
     },
-    weekLabel() {
-      const start = moment(this.attendanceWeekStart, 'YYYY-MM-DD');
-      const end = start.clone().add(6, 'days');
-      const endLabel = `${end.date()} ${ruMonthGenitive(end)} ${end.year()}`;
-      if (start.year() !== end.year() || start.month() !== end.month()) {
-        return `${start.date()} ${ruMonthGenitive(start)} – ${endLabel}`;
+    monthLabel() {
+      const date = moment(this.attendanceMonth, 'YYYY-MM').toDate();
+      const str = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(date);
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    },
+    attendanceDays() {
+      const start = moment(this.attendanceMonth, 'YYYY-MM').startOf('month');
+      const end = moment(this.attendanceMonth, 'YYYY-MM').endOf('month');
+      const groupDays = this.schedules
+        .filter((s) => s.resource_id === this.attendanceGroupId)
+        .flatMap((s) => s.day_times.map((dt) => dt.day));
+      // day is 0=Пн..6=Вс, moment's isoWeekday() is 1=Пн..7=Вс.
+      const allowedIsoWeekdays = groupDays.length ? new Set(groupDays.map((d) => d + 1)) : null;
+      const days = [];
+      const cursor = start.clone();
+      while (cursor.isSameOrBefore(end, 'day')) {
+        if (!allowedIsoWeekdays || allowedIsoWeekdays.has(cursor.isoWeekday())) {
+          days.push({ date: cursor.format('YYYY-MM-DD'), num: cursor.date(), name: ruDayShort(cursor) });
+        }
+        cursor.add(1, 'day');
       }
-      return `${start.date()} – ${endLabel}`;
+      return days;
     },
   },
   async mounted() {
-    await Promise.all([this.loadGroups(), this.loadTrainers(), this.loadMemberships(), this.loadTrialLessons()]);
+    await Promise.all([
+      this.loadGroups(),
+      this.loadTrainers(),
+      this.loadClients(),
+      this.loadMemberships(),
+      this.loadTrialLessons(),
+      this.loadSchedules(),
+    ]);
+    this.warnExpiringMemberships();
+  },
+  watch: {
+    selectedGroupId(val) {
+      // Клик по группе на Расписании сразу готовит вкладку Журнал — без
+      // повторного выбора той же группы в её собственном FormSelect.
+      if (val) {
+        this.attendanceGroupId = val;
+        this.loadAttendance();
+      }
+    },
   },
   methods: {
     async refresh() {
-      await Promise.all([this.loadGroups(), this.loadTrainers(), this.loadMemberships(), this.loadTrialLessons()]);
+      await Promise.all([
+        this.loadGroups(),
+        this.loadTrainers(),
+        this.loadClients(),
+        this.loadMemberships(),
+        this.loadTrialLessons(),
+        this.loadSchedules(),
+      ]);
       if (this.attendanceGroupId) await this.loadAttendance();
     },
     async loadGroups() {
-      this.groups = await apiFetch(`/resources?section=${this.sectionKey}`);
+      const all = await apiFetch(`/resources?section=${this.sectionKey}`);
+      this.groups = all.filter((r) => r.kind !== 'room');
+      this.rooms = all.filter((r) => r.kind === 'room');
     },
     async loadTrainers() {
       this.trainers = await apiFetch(`/trainers?section=${this.sectionKey}`);
     },
+    async loadClients() {
+      this.clients = await apiFetch(`/clients?section=${this.sectionKey}`);
+    },
     async loadMemberships() {
       this.memberships = await apiFetch(`/memberships?section=${this.sectionKey}`);
+    },
+    async loadSchedules() {
+      this.schedules = await apiFetch(`/group_schedules?section=${this.sectionKey}`);
     },
     async loadTrialLessons() {
       this.trialLessons = await apiFetch(`/trial_lessons?section=${this.sectionKey}`);
@@ -312,6 +453,31 @@ export default {
     membershipStatusLabel(status) {
       return MEMBERSHIP_STATUS_LABELS[status] || status;
     },
+    // A membership marked "active" whose end_date has already passed (never
+    // renewed) should read as expired even though nothing ever flips the
+    // stored status — frozen/expired stay as stored, only "active" is checked.
+    effectiveStatus(m) {
+      if (m.status === 'active' && moment(m.end_date).isBefore(moment(), 'day')) return 'expired';
+      return m.status;
+    },
+    // One combined toast on load, rather than one per client, so it doesn't
+    // spam the screen when several memberships expire around the same time.
+    warnExpiringMemberships() {
+      const soon = this.memberships.filter((m) => {
+        if (this.effectiveStatus(m) !== 'active') return false;
+        const daysLeft = moment(m.end_date).startOf('day').diff(moment().startOf('day'), 'days');
+        return daysLeft >= 0 && daysLeft < 3;
+      });
+      if (!soon.length) return;
+      const entries = soon.map((m) => {
+        const client = this.clients.find((c) => c.id === m.client_id);
+        return `${client ? client.full_name : '—'} (${this.groupLabels(m.resource_ids)})`;
+      });
+      const message = soon.length === 1
+        ? `Абонемент клиента ${entries[0]} заканчивается меньше чем через 3 дня`
+        : `У ${soon.length} клиентов абонемент заканчивается меньше чем через 3 дня: ${entries.join(', ')}`;
+      showToast(message);
+    },
     trialStatusLabel(status) {
       return TRIAL_STATUS_LABELS[status] || status;
     },
@@ -324,15 +490,66 @@ export default {
       return moment(date).format('DD.MM.YYYY HH:mm');
     },
 
-    // ---------------- Клиенты / абонементы ----------------
-    openAddMembership() {
+    // ---------------- Клиенты ----------------
+    clientMemberships(clientId) {
+      return this.memberships.filter((m) => m.client_id === clientId);
+    },
+    clientActiveSummary(clientId) {
+      let active = this.clientMemberships(clientId).filter((m) => this.effectiveStatus(m) === 'active');
+      if (this.selectedGroupId) active = active.filter((m) => m.resource_ids.includes(this.selectedGroupId));
+      if (!active.length) return 'Нет активного абонемента';
+      return active.map((m) => this.groupLabels(m.resource_ids)).join(', ');
+    },
+    clientBarColor(clientId) {
+      let active = this.clientMemberships(clientId).filter((m) => this.effectiveStatus(m) === 'active');
+      if (this.selectedGroupId) active = active.filter((m) => m.resource_ids.includes(this.selectedGroupId));
+      return active.length ? this.groupColor(active[0].resource_ids[0]) : '#9aa0a6';
+    },
+    openAddClient() {
+      this.editingClientId = null;
+      this.clientForm = { full_name: '', phone: '+7', age: null, parent_name: '' };
+      this.showClientModal = true;
+    },
+    onClientClick(c) {
+      if (!this.canWrite) return;
+      this.editingClientId = c.id;
+      this.clientForm = { full_name: c.full_name, phone: c.phone, age: c.age, parent_name: c.parent_name };
+      this.showClientModal = true;
+    },
+    async confirmClient() {
+      if (!this.clientForm.full_name.trim() || !this.clientForm.phone.trim()) {
+        await showAlert('Заполните ФИО и телефон');
+        return;
+      }
+      const body = { ...this.clientForm };
+      if (this.editingClientId) {
+        await apiFetch(`/clients/${this.editingClientId}?section=${this.sectionKey}`, { method: 'PUT', body });
+        this.showClientModal = false;
+        await this.loadClients();
+      } else {
+        const created = await apiFetch(`/clients?section=${this.sectionKey}`, { method: 'POST', body });
+        await this.loadClients();
+        // Карточка создана — сразу открываем её же в режиме редактирования,
+        // чтобы можно было без лишнего клика завести абонемент.
+        this.onClientClick(created);
+      }
+    },
+    async deleteClient() {
+      const ok = await showConfirm('Удалить клиента и все его абонементы?', { header: 'Удаление', confirmText: 'Удалить' });
+      if (!ok) return;
+      await apiFetch(`/clients/${this.editingClientId}?section=${this.sectionKey}`, { method: 'DELETE' });
+      this.showClientModal = false;
+      await Promise.all([this.loadClients(), this.loadMemberships()]);
+      if (this.attendanceGroupId) await this.loadAttendance();
+    },
+
+    // ---------------- Абонементы ----------------
+    openAddMembershipForClient() {
       this.editingMembershipId = null;
+      this.membershipClientId = this.editingClientId;
       this.membershipForm = {
-        full_name: '',
-        phone: '+7',
-        age: null,
-        parent_name: '',
-        resource_ids: [],
+        contract_number: String(this.memberships.length + 1),
+        resource_ids: this.selectedGroupId ? [this.selectedGroupId] : [],
         payment_date: moment().format('YYYY-MM-DD'),
         start_date: moment().format('YYYY-MM-DD'),
         end_date: moment().add(1, 'month').format('YYYY-MM-DD'),
@@ -344,11 +561,9 @@ export default {
     onMembershipClick(m) {
       if (!this.canWrite) return;
       this.editingMembershipId = m.id;
+      this.membershipClientId = m.client_id;
       this.membershipForm = {
-        full_name: m.full_name,
-        phone: m.phone,
-        age: m.age,
-        parent_name: m.parent_name,
+        contract_number: m.contract_number || '',
         resource_ids: [...m.resource_ids],
         payment_date: m.payment_date ? moment(m.payment_date).format('YYYY-MM-DD') : '',
         start_date: moment(m.start_date).format('YYYY-MM-DD'),
@@ -359,21 +574,23 @@ export default {
       this.showMembershipModal = true;
     },
     async confirmMembership() {
-      if (!this.membershipForm.full_name.trim() || !this.membershipForm.phone.trim() || !this.membershipForm.resource_ids.length) {
-        await showAlert('Заполните ФИО, телефон и хотя бы одну группу');
+      if (!this.membershipForm.resource_ids.length) {
+        await showAlert('Выберите хотя бы одну группу');
         return;
       }
       const body = { ...this.membershipForm };
-      const url = this.editingMembershipId
-        ? `/memberships/${this.editingMembershipId}?section=${this.sectionKey}`
-        : `/memberships?section=${this.sectionKey}`;
-      await apiFetch(url, { method: this.editingMembershipId ? 'PUT' : 'POST', body });
+      if (this.editingMembershipId) {
+        await apiFetch(`/memberships/${this.editingMembershipId}?section=${this.sectionKey}`, { method: 'PUT', body });
+      } else {
+        body.client_id = this.membershipClientId;
+        await apiFetch(`/memberships?section=${this.sectionKey}`, { method: 'POST', body });
+      }
       this.showMembershipModal = false;
       await this.loadMemberships();
       if (this.attendanceGroupId) await this.loadAttendance();
     },
     async deleteMembership() {
-      const ok = await showConfirm('Удалить абонемент этого клиента?', { header: 'Удаление', confirmText: 'Удалить' });
+      const ok = await showConfirm('Удалить этот абонемент?', { header: 'Удаление', confirmText: 'Удалить' });
       if (!ok) return;
       await apiFetch(`/memberships/${this.editingMembershipId}?section=${this.sectionKey}`, { method: 'DELETE' });
       this.showMembershipModal = false;
@@ -381,23 +598,60 @@ export default {
       if (this.attendanceGroupId) await this.loadAttendance();
     },
 
-    // ---------------- Посещаемость ----------------
+    // ---------------- Расписание ----------------
+    onScheduleClick(s) {
+      if (!this.canWrite) return;
+      this.editingScheduleId = s.id;
+      this.scheduleForm = {
+        resource_id: s.resource_id,
+        room_id: s.room_id,
+        day_times: s.day_times.map((dt) => ({ ...dt })),
+      };
+      this.showScheduleModal = true;
+    },
+    async confirmSchedule() {
+      if (
+        !this.scheduleForm.resource_id
+        || !this.scheduleForm.room_id
+        || !this.scheduleForm.day_times.length
+        || this.scheduleForm.day_times.some((dt) => !dt.start_time || !dt.end_time)
+      ) {
+        await showAlert('Заполните группу, зал и время для каждого выбранного дня');
+        return;
+      }
+      const body = { ...this.scheduleForm };
+      const url = this.editingScheduleId
+        ? `/group_schedules/${this.editingScheduleId}?section=${this.sectionKey}`
+        : `/group_schedules?section=${this.sectionKey}`;
+      await apiFetch(url, { method: this.editingScheduleId ? 'PUT' : 'POST', body });
+      this.showScheduleModal = false;
+      await this.loadSchedules();
+    },
+    async deleteSchedule() {
+      const ok = await showConfirm('Удалить это расписание?', { header: 'Удаление', confirmText: 'Удалить' });
+      if (!ok) return;
+      await apiFetch(`/group_schedules/${this.editingScheduleId}?section=${this.sectionKey}`, { method: 'DELETE' });
+      this.showScheduleModal = false;
+      await this.loadSchedules();
+    },
+
+    // ---------------- Журнал ----------------
     async onGroupChange(groupId) {
       this.attendanceGroupId = groupId;
       await this.loadAttendance();
     },
-    async prevWeek() {
-      this.attendanceWeekStart = moment(this.attendanceWeekStart, 'YYYY-MM-DD').subtract(7, 'days').format('YYYY-MM-DD');
+    async prevMonth() {
+      this.attendanceMonth = moment(this.attendanceMonth, 'YYYY-MM').subtract(1, 'month').format('YYYY-MM');
       await this.loadAttendance();
     },
-    async nextWeek() {
-      this.attendanceWeekStart = moment(this.attendanceWeekStart, 'YYYY-MM-DD').add(7, 'days').format('YYYY-MM-DD');
+    async nextMonth() {
+      this.attendanceMonth = moment(this.attendanceMonth, 'YYYY-MM').add(1, 'month').format('YYYY-MM');
       await this.loadAttendance();
     },
     async loadAttendance() {
       if (!this.attendanceGroupId) return;
-      const start = this.attendanceWeekStart;
-      const end = moment(this.attendanceWeekStart, 'YYYY-MM-DD').add(6, 'days').format('YYYY-MM-DD');
+      const start = moment(this.attendanceMonth, 'YYYY-MM').startOf('month').format('YYYY-MM-DD');
+      const end = moment(this.attendanceMonth, 'YYYY-MM').endOf('month').format('YYYY-MM-DD');
       const result = await apiFetch(
         `/attendance?section=${this.sectionKey}&resource_id=${this.attendanceGroupId}&start_date=${start}&end_date=${end}`
       );
@@ -448,7 +702,7 @@ export default {
     },
     openAddTrial() {
       this.editingTrialId = null;
-      this.trialForm = { full_name: '', phone: '+7', age: null, resource_id: null, scheduled_at: moment().format('YYYY-MM-DDTHH:mm') };
+      this.trialForm = { full_name: '', phone: '+7', age: null, resource_id: this.selectedGroupId || null, scheduled_at: moment().format('YYYY-MM-DDTHH:mm') };
       this.showTrialModal = true;
     },
     onTrialClick(t) {
@@ -488,7 +742,7 @@ export default {
     // ---------------- Тренеры ----------------
     openAddTrainer() {
       this.editingTrainerId = null;
-      this.trainerForm = { full_name: '', phone: '+7', resource_ids: [] };
+      this.trainerForm = { full_name: '', phone: '+7', resource_ids: this.selectedGroupId ? [this.selectedGroupId] : [] };
       this.showTrainerModal = true;
     },
     onTrainerClick(t) {
@@ -537,6 +791,18 @@ export default {
   gap: 16px;
   margin-bottom: 20px;
   flex-wrap: wrap;
+}
+
+.header-group-filter {
+  align-self: center;
+  min-width: 220px;
+  margin-bottom: 0;
+}
+
+.header-group-filter :deep(.ff-trigger) {
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .page-header > .primary-btn {
@@ -720,7 +986,7 @@ export default {
 .month-label {
   font-weight: 700;
   color: #1c1c1e;
-  width: 230px;
+  width: 190px;
   text-align: center;
   white-space: nowrap;
 }
@@ -735,38 +1001,47 @@ export default {
   cursor: pointer;
 }
 
-.attendance-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.attendance-card {
+.attendance-table-wrap {
   background: #ffffff;
   border-radius: 14px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  padding: 16px;
-  max-width: 640px;
+  overflow-x: auto;
+  padding: 4px 0;
 }
 
-.attendance-card-name {
+.attendance-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.attendance-table th,
+.attendance-table td {
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.attendance-table tbody tr + tr td {
+  border-top: 1px solid #f0f1f3;
+}
+
+.att-name-col {
+  position: sticky;
+  left: 0;
+  background: #ffffff;
+  text-align: left;
   font-weight: 700;
   color: #2196f3;
-  margin-bottom: 12px;
+  white-space: nowrap;
+  padding-left: 16px;
+  z-index: 1;
 }
 
-.attendance-days {
-  display: flex;
-  gap: 8px;
+.attendance-table thead .att-name-col {
+  color: #1c1c1e;
 }
 
-.attendance-day-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
+.att-day-col {
+  width: 44px;
 }
 
 .attendance-day-label {
@@ -845,4 +1120,36 @@ export default {
   color: #d32f2f;
   margin-right: auto;
 }
+
+.pill-btn.success {
+  background: rgba(76, 175, 80, 0.14);
+  color: #2e7d32;
+}
+
+.section-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #1c1c1e;
+  margin: 18px 0 10px;
+}
+
+.client-memberships {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.client-memberships .record-card {
+  padding: 12px 14px;
+}
+
+.client-memberships .empty-state {
+  padding: 16px 0;
+}
+
+.add-membership-btn {
+  width: 100%;
+}
+
 </style>

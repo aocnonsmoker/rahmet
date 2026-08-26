@@ -2,7 +2,7 @@
   <div class="ff">
     <label v-if="label" class="ff-label">{{ label }}</label>
     <div class="ff-wrap" :class="{ open: isOpen, 'open-up': openUpward }">
-      <button ref="trigger" type="button" class="ff-trigger" @click="toggle">
+      <button ref="trigger" type="button" class="ff-trigger" :disabled="disabled" @click="toggle">
         <span class="ff-trigger-content">
           <span v-if="selectedColor" class="ff-dot" :style="{ background: selectedColor }"></span>
           <span :class="{ 'ff-placeholder': !selectedLabel }">{{ selectedLabel || placeholder }}</span>
@@ -48,6 +48,10 @@ export default {
       type: Boolean,
       default: false,
     },
+    disabled: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ["update:modelValue"],
   data() {
@@ -89,6 +93,7 @@ export default {
   },
   methods: {
     toggle() {
+      if (this.disabled) return;
       if (!this.isOpen) {
         this.openUpward = this.shouldOpenUpward();
         this.updateDropdownPosition();
@@ -220,6 +225,11 @@ export default {
   color: #6a6f75;
   font-size: 0.8rem;
   transition: transform 0.15s ease;
+}
+
+.ff-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .ff-wrap.open .ff-trigger {
