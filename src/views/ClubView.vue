@@ -15,17 +15,20 @@
 
     <ion-content :fullscreen="true" :scroll-y="tab !== 'schedule'">
       <div class="page-root">
+        <FormSelect
+          class="group-filter-select"
+          placeholder="Все секции"
+          :model-value="selectedGroupId"
+          :options="groupFilterOptions"
+          @update:modelValue="selectedGroupId = $event"
+        />
+
         <div class="tabs-row">
           <button class="tab-btn" :class="{ active: tab === 'schedule' }" type="button" @click="tab = 'schedule'">Расписание</button>
           <button class="tab-btn" :class="{ active: tab === 'clients' }" type="button" @click="tab = 'clients'">Клиенты</button>
           <button class="tab-btn" :class="{ active: tab === 'trainers' }" type="button" @click="tab = 'trainers'">Тренеры</button>
           <button class="tab-btn" :class="{ active: tab === 'attendance' }" type="button" @click="tab = 'attendance'">Журнал</button>
           <button class="tab-btn" :class="{ active: tab === 'trials' }" type="button" @click="tab = 'trials'">Пробные</button>
-        </div>
-
-        <div v-if="selectedGroupId" class="group-filter-bar">
-          Показаны данные: <strong>{{ groupLabel(selectedGroupId) }}</strong>
-          <button type="button" class="clear-filter-btn" @click="clearGroupFilter">Показать все секции</button>
         </div>
 
         <!-- ===================== Клиенты / абонементы ===================== -->
@@ -371,6 +374,9 @@ export default {
     plainGroupOptions() {
       return this.groups.map((g) => ({ value: g.id, label: g.label }));
     },
+    groupFilterOptions() {
+      return [{ value: null, label: 'Все секции' }, ...this.groups.map((g) => ({ value: g.id, label: g.label, color: g.color }))];
+    },
     visibleClients() {
       if (!this.selectedGroupId) return this.clients;
       return this.clients.filter((c) => this.clientMemberships(c.id).some((m) => m.resource_ids.includes(this.selectedGroupId)));
@@ -501,22 +507,32 @@ export default {
       if (m.status === 'active' && moment(m.end_date).isBefore(moment(), 'day')) return 'expired';
       return m.status;
     },
+    daysWord(n) {
+      const mod100 = n % 100;
+      const mod10 = n % 10;
+      if (mod100 >= 11 && mod100 <= 14) return 'дней';
+      if (mod10 === 1) return 'день';
+      if (mod10 >= 2 && mod10 <= 4) return 'дня';
+      return 'дней';
+    },
+    daysLeftLabel(daysLeft) {
+      return daysLeft === 0 ? 'сегодня' : `через ${daysLeft} ${this.daysWord(daysLeft)}`;
+    },
     // One combined toast on load, rather than one per client, so it doesn't
     // spam the screen when several memberships expire around the same time.
     warnExpiringMemberships() {
-      const soon = this.memberships.filter((m) => {
-        if (this.effectiveStatus(m) !== 'active') return false;
-        const daysLeft = moment(m.end_date).startOf('day').diff(moment().startOf('day'), 'days');
-        return daysLeft >= 0 && daysLeft < 3;
-      });
+      const soon = this.memberships
+        .map((m) => ({ m, daysLeft: moment(m.end_date).startOf('day').diff(moment().startOf('day'), 'days') }))
+        .filter(({ m, daysLeft }) => this.effectiveStatus(m) === 'active' && daysLeft >= 0 && daysLeft <= 3);
       if (!soon.length) return;
-      const entries = soon.map((m) => {
+      const entries = soon.map(({ m, daysLeft }) => {
         const client = this.clients.find((c) => c.id === m.client_id);
-        return `${client ? client.full_name : '—'} (${this.groupLabels(m.resource_ids)})`;
+        const name = client ? client.full_name : '—';
+        return `${name} (${this.groupLabels(m.resource_ids)}) закончится ${this.daysLeftLabel(daysLeft)}`;
       });
       const message = soon.length === 1
-        ? `Абонемент клиента ${entries[0]} заканчивается меньше чем через 3 дня`
-        : `У ${soon.length} клиентов абонемент заканчивается меньше чем через 3 дня: ${entries.join(', ')}`;
+        ? `Абонемент клиента ${entries[0]}`
+        : `У ${soon.length} клиентов: ${entries.join(', ')}`;
       showToast(message);
     },
     trialStatusLabel(status) {
@@ -640,9 +656,6 @@ export default {
     },
 
     // ---------------- Расписание ----------------
-    clearGroupFilter() {
-      this.selectedGroupId = null;
-    },
     onScheduleClick(s) {
       if (!this.canWrite) return;
       this.editingScheduleId = s.id;
@@ -879,6 +892,10 @@ export default {
   box-sizing: border-box;
 }
 
+.group-filter-select {
+  margin-bottom: 10px;
+}
+
 .tabs-row {
   display: flex;
   flex-wrap: wrap;
@@ -952,28 +969,6 @@ export default {
   cursor: pointer;
 }
 
-.group-filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(33, 150, 243, 0.1);
-  border-radius: 12px;
-  padding: 10px 14px;
-  margin: 0 2px 12px;
-  font-size: 0.85rem;
-  color: #1c1c1e;
-}
-
-.clear-filter-btn {
-  margin-left: auto;
-  border: none;
-  background: transparent;
-  color: #2196f3;
-  font-weight: 700;
-  font-size: 0.82rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
 
 .record-bar {
   width: 3px;

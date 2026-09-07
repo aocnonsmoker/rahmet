@@ -460,22 +460,32 @@ export default {
       if (m.status === 'active' && moment(m.end_date).isBefore(moment(), 'day')) return 'expired';
       return m.status;
     },
+    daysWord(n) {
+      const mod100 = n % 100;
+      const mod10 = n % 10;
+      if (mod100 >= 11 && mod100 <= 14) return 'дней';
+      if (mod10 === 1) return 'день';
+      if (mod10 >= 2 && mod10 <= 4) return 'дня';
+      return 'дней';
+    },
+    daysLeftLabel(daysLeft) {
+      return daysLeft === 0 ? 'сегодня' : `через ${daysLeft} ${this.daysWord(daysLeft)}`;
+    },
     // One combined toast on load, rather than one per client, so it doesn't
     // spam the screen when several memberships expire around the same time.
     warnExpiringMemberships() {
-      const soon = this.memberships.filter((m) => {
-        if (this.effectiveStatus(m) !== 'active') return false;
-        const daysLeft = moment(m.end_date).startOf('day').diff(moment().startOf('day'), 'days');
-        return daysLeft >= 0 && daysLeft < 3;
-      });
+      const soon = this.memberships
+        .map((m) => ({ m, daysLeft: moment(m.end_date).startOf('day').diff(moment().startOf('day'), 'days') }))
+        .filter(({ m, daysLeft }) => this.effectiveStatus(m) === 'active' && daysLeft >= 0 && daysLeft <= 3);
       if (!soon.length) return;
-      const entries = soon.map((m) => {
+      const entries = soon.map(({ m, daysLeft }) => {
         const client = this.clients.find((c) => c.id === m.client_id);
-        return `${client ? client.full_name : '—'} (${this.groupLabels(m.resource_ids)})`;
+        const name = client ? client.full_name : '—';
+        return `${name} (${this.groupLabels(m.resource_ids)}) закончится ${this.daysLeftLabel(daysLeft)}`;
       });
       const message = soon.length === 1
-        ? `Абонемент клиента ${entries[0]} заканчивается меньше чем через 3 дня`
-        : `У ${soon.length} клиентов абонемент заканчивается меньше чем через 3 дня: ${entries.join(', ')}`;
+        ? `Абонемент клиента ${entries[0]}`
+        : `У ${soon.length} клиентов: ${entries.join(', ')}`;
       showToast(message);
     },
     trialStatusLabel(status) {

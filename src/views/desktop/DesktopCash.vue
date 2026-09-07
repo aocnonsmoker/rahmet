@@ -141,8 +141,23 @@ export default {
     await this.refreshAll();
     this.$watch('today', this.sumTotals);
     this.$watch('tab', (val) => {
-      if (val === 2) this.buildAnalytic();
+      if (val === 2) {
+        this.buildAnalytic();
+      } else if (this.chartInstance) {
+        // The canvas lives behind v-if="tab === 2" — leaving the tab removes it
+        // from the DOM without unmounting DesktopCash itself, so beforeUnmount
+        // never fires here; destroy the chart now or its animation loop keeps
+        // running against a canvas that no longer exists.
+        this.chartInstance.destroy();
+        this.chartInstance = null;
+      }
     });
+  },
+  beforeUnmount() {
+    if (this.chartInstance) {
+      this.chartInstance.destroy();
+      this.chartInstance = null;
+    }
   },
   methods: {
     formatShort(date) {

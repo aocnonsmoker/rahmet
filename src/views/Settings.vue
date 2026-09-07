@@ -96,22 +96,6 @@
                 @update:modelValue="editingSection.guest_fields = $event"
               />
 
-              <template v-if="editingSection.template !== 'queue'">
-                <div class="resource-list">
-                  <div v-for="r in groupResources" :key="r.id" class="resource-row" :style="{ borderColor: r.color }">
-                    <span class="resource-color" :style="{ background: r.color }"></span>
-                    <div class="resource-row-label">
-                      {{ r.label }}
-                    </div>
-                    <div class="section-actions">
-                      <button class="icon-btn edit" type="button" @click="openEditResource(r)">Изменить</button>
-                      <button class="icon-btn danger" type="button" @click="removeResource(r)">Удалить</button>
-                    </div>
-                  </div>
-                </div>
-                <button class="add-section-btn" type="button" @click="openAddResource('group')">+ Добавить</button>
-              </template>
-
               <template v-if="editingSection.template === 'club'">
                 <label class="icon-field-label">Залы</label>
                 <div class="resource-list">
@@ -127,6 +111,26 @@
                   <div v-if="!roomResources.length" class="empty-hint">Залы не добавлены</div>
                 </div>
                 <button class="add-section-btn" type="button" @click="openAddResource('room')">+ Добавить зал</button>
+              </template>
+
+              <template v-if="editingSection.template !== 'queue'">
+                <label v-if="editingSection.template === 'club'" class="icon-field-label">Группы</label>
+                <div class="resource-list">
+                  <div v-for="r in groupResources" :key="r.id" class="resource-row" :style="{ borderColor: r.color }">
+                    <span class="resource-color" :style="{ background: r.color }"></span>
+                    <div class="resource-row-label">
+                      {{ r.label }}
+                    </div>
+                    <div class="section-actions">
+                      <button class="icon-btn edit" type="button" @click="openEditResource(r)">Изменить</button>
+                      <button class="icon-btn danger" type="button" @click="removeResource(r)">Удалить</button>
+                    </div>
+                  </div>
+                  <div v-if="editingSection.template === 'club' && !groupResources.length" class="empty-hint">Группы не добавлены</div>
+                </div>
+                <button class="add-section-btn" type="button" @click="openAddResource('group')">
+                  {{ editingSection.template === 'club' ? '+ Добавить группу' : '+ Добавить' }}
+                </button>
               </template>
             </template>
           </ion-content>
@@ -235,7 +239,6 @@
                   <div v-if="!schedulesForResource(editingResource.id).length" class="empty-hint">Расписание не задано</div>
                 </div>
                 <button
-                  v-if="!schedulesForResource(editingResource.id).length"
                   class="add-section-btn"
                   type="button"
                   @click="openAddSchedule(editingResource.id)"
@@ -321,12 +324,30 @@
                     <span v-if="u.read_only" class="read-only-tag">только просмотр</span>
                   </div>
                 </div>
-                <div v-if="u.role !== 'owner'" class="staff-actions">
+                <div v-if="u.username === currentUsername" class="staff-actions">
+                  <button class="icon-btn edit" type="button" @click="toggleEditPassword(u)">
+                    {{ editingPasswordId === u.id ? 'Свернуть' : 'Изменить пароль' }}
+                  </button>
+                </div>
+                <div v-else-if="u.role !== 'owner'" class="staff-actions">
                   <button class="icon-btn edit" type="button" @click="toggleEditStaff(u)">
                     {{ editingStaffId === u.id ? 'Свернуть' : 'Изменить' }}
                   </button>
                   <button class="icon-btn danger" type="button" @click="deactivateStaff(u)">Уволить</button>
                 </div>
+              </div>
+
+              <div v-if="editingPasswordId === u.id" class="staff-edit-panel">
+                <FormInput
+                  label="Новый пароль"
+                  type="text"
+                  placeholder="Введите новый пароль"
+                  :model-value="passwordForm"
+                  @update:modelValue="passwordForm = $event"
+                />
+                <ion-button expand="block" class="save-btn" :disabled="savingPassword" @click="saveOwnPassword(u)">
+                  {{ savingPassword ? 'Сохраняем…' : 'Сохранить' }}
+                </ion-button>
               </div>
 
               <div v-if="editingStaffId === u.id" class="staff-edit-panel">
@@ -403,6 +424,7 @@ import { apiFetch } from '@/services/api';
 import { showAlert, showConfirm } from '@/services/dialogs';
 import { useSectionsStore } from '@/stores/sections';
 import { useViewportStore } from '@/stores/viewport';
+import { useAuthStore } from '@/stores/auth';
 import { RU_DAYS_SHORT } from '@/utils/ruDate';
 
 const TEMPLATE_LABELS = {
@@ -468,6 +490,10 @@ export default {
       editingStaffId: null,
       editForm: { role: 'employee', sections: [], password: '', readOnly: false },
       savingStaff: false,
+
+      editingPasswordId: null,
+      passwordForm: '',
+      savingPassword: false,
     };
   },
   computed: {
@@ -510,6 +536,9 @@ export default {
     },
     activeStaff() {
       return this.staff.filter((u) => u.is_active);
+    },
+    currentUsername() {
+      return useAuthStore().username;
     },
     groupResources() {
       return this.resources.filter((r) => r.kind !== 'room');
@@ -823,6 +852,31 @@ export default {
         this.savingStaff = false;
       }
     },
+    toggleEditPassword(u) {
+      if (this.editingPasswordId === u.id) {
+        this.editingPasswordId = null;
+        return;
+      }
+      this.editingPasswordId = u.id;
+      this.passwordForm = '';
+    },
+    async saveOwnPassword(u) {
+      if (!this.passwordForm.trim()) {
+        await showAlert('Введите новый пароль');
+        return;
+      }
+      this.savingPassword = true;
+      try {
+        await apiFetch(`/users/${u.id}`, { method: 'PUT', body: { password: this.passwordForm.trim() } });
+        this.editingPasswordId = null;
+        this.passwordForm = '';
+        await showAlert('Пароль изменён');
+      } catch (e) {
+        await showAlert(e.message);
+      } finally {
+        this.savingPassword = false;
+      }
+    },
   },
 };
 </script>
@@ -1025,6 +1079,7 @@ export default {
   border-radius: 14px;
   padding: 14px;
   margin-top: 4px;
+  margin-bottom: 16px;
   cursor: pointer;
 }
 
