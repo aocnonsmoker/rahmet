@@ -124,7 +124,11 @@
 
     <!-- ===================== Пробные занятия ===================== -->
     <div v-if="tab === 'trials'" class="tab-panel wide">
-      <button class="date-pill" type="button" @click="showTrialDateModal = true">{{ formattedTrialDate }}</button>
+      <div class="trial-filters-row">
+        <button class="date-pill" type="button" :class="{ disabled: showAllTrialDates }" :disabled="showAllTrialDates" @click="showTrialDateModal = true">{{ formattedTrialDate }}</button>
+        <button class="pill-toggle-btn" type="button" :class="{ active: showAllTrialDates }" @click="showAllTrialDates = !showAllTrialDates">За все даты</button>
+        <FormSelect class="trial-status-filter" placeholder="Все статусы" :model-value="selectedTrialStatus" :options="trialStatusFilterOptions" @update:modelValue="selectedTrialStatus = $event" />
+      </div>
       <DesktopModal v-model="showTrialDateModal" title="Выберите дату">
         <MonthCalendar :model-value="trialDate" :events="trialLessonsForBadges" @update:modelValue="onPickTrialDate" />
       </DesktopModal>
@@ -139,7 +143,7 @@
             <span class="status-badge" :class="t.status">{{ trialStatusLabel(t.status) }}</span>
           </div>
         </div>
-        <div v-if="!trialLessonsForDay.length" class="empty-state">Нет записей на пробные занятия в этот день</div>
+        <div v-if="!trialLessonsForDay.length" class="empty-state">{{ showAllTrialDates ? 'Нет записей на пробные занятия' : 'Нет записей на пробные занятия в этот день' }}</div>
       </div>
     </div>
 
@@ -303,6 +307,8 @@ export default {
 
       showTrialDateModal: false,
       trialDate: moment().format('YYYY-MM-DD'),
+      showAllTrialDates: false,
+      selectedTrialStatus: null,
 
       showTrainerModal: false,
       editingTrainerId: null,
@@ -344,6 +350,9 @@ export default {
     trialStatusOptions() {
       return Object.entries(TRIAL_STATUS_LABELS).map(([value, label]) => ({ value, label }));
     },
+    trialStatusFilterOptions() {
+      return [{ value: null, label: 'Все статусы' }, ...this.trialStatusOptions];
+    },
     formattedTrialDate() {
       const date = new Date(`${this.trialDate}T00:00:00`);
       const str = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: '2-digit', month: 'long' }).format(date);
@@ -354,8 +363,9 @@ export default {
     },
     trialLessonsForDay() {
       return this.trialLessons
-        .filter((t) => t.scheduled_at.slice(0, 10) === this.trialDate)
+        .filter((t) => this.showAllTrialDates || t.scheduled_at.slice(0, 10) === this.trialDate)
         .filter((t) => !this.selectedGroupId || t.resource_id === this.selectedGroupId)
+        .filter((t) => !this.selectedTrialStatus || t.status === this.selectedTrialStatus)
         .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
     },
     roomOptions() {
@@ -896,6 +906,51 @@ export default {
   color: #2b2f33;
   cursor: pointer;
   margin-bottom: 16px;
+}
+
+.trial-filters-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.trial-filters-row .date-pill {
+  margin-bottom: 0;
+}
+
+.date-pill.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pill-toggle-btn {
+  display: inline-block;
+  border: none;
+  background: #eef0f0;
+  border-radius: 18px;
+  padding: 8px 18px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2b2f33;
+  cursor: pointer;
+}
+
+.pill-toggle-btn.active {
+  background: #2196f3;
+  color: #fff;
+}
+
+.trial-status-filter {
+  min-width: 200px;
+  margin-bottom: 0;
+}
+
+.trial-status-filter :deep(.ff-trigger) {
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .cards-grid {
