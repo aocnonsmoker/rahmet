@@ -115,8 +115,8 @@
                     <td v-for="d in attendanceDays" :key="d.date" class="att-day-col">
                       <div
                         class="att-cell"
-                        :class="attendanceCellClass(m.id, d.date)"
-                        @click="toggleAttendance(m.id, d.date)"
+                        :class="attendanceCellClass(m, d.date)"
+                        @click="toggleAttendance(m, d.date)"
                       >{{ attendanceCellMark(m.id, d.date) }}</div>
                     </td>
                   </tr>
@@ -136,7 +136,7 @@
         <div v-if="tab === 'trials'" class="panel">
           <ion-button v-if="canWrite" expand="block" class="add-btn" @click="openAddTrial">+ Записать на пробное</ion-button>
           <div class="trial-filters-row">
-            <button class="date-pill" type="button" :class="{ disabled: showAllTrialDates }" :disabled="showAllTrialDates" @click="showTrialDateModal = true">{{ formattedTrialDate }}</button>
+            <button class="date-pill" type="button" :class="{ dimmed: showAllTrialDates, active: !showAllTrialDates }" @click="onDatePillClick">{{ formattedTrialDate }}</button>
             <button class="pill-toggle-btn" type="button" :class="{ active: showAllTrialDates }" @click="showAllTrialDates = !showAllTrialDates">За все даты</button>
           </div>
           <FormSelect class="trial-status-filter" placeholder="Все статусы" :model-value="selectedTrialStatus" :options="trialStatusFilterOptions" @update:modelValue="selectedTrialStatus = $event" />
@@ -183,15 +183,16 @@
         <FormInput label="Телефон" type="tel" :model-value="clientForm.phone" @update:modelValue="clientForm.phone = $event" />
         <FormInput label="Возраст" type="number" :model-value="clientForm.age" @update:modelValue="clientForm.age = $event" />
         <FormInput label="ФИО родителя/опекуна" type="text" :model-value="clientForm.parent_name" @update:modelValue="clientForm.parent_name = $event" />
-        <FormInput label="Номер договора" type="text" :model-value="clientForm.contract_number" @update:modelValue="clientForm.contract_number = $event" />
 
         <template v-if="editingClientId">
+          <FormInput label="Номер договора" type="text" :model-value="clientForm.contract_number" @update:modelValue="clientForm.contract_number = $event" />
+          <FormInput label="Дата договора" type="date" :model-value="clientForm.contract_date" @update:modelValue="clientForm.contract_date = $event" />
           <div class="section-title">Абонементы</div>
           <div v-for="m in clientMemberships(editingClientId)" :key="m.id" class="record-card" @click="onMembershipClick(m)">
             <div class="record-bar" :style="{ background: groupColor(m.resource_ids[0]) }"></div>
             <div class="record-body">
               <div class="record-title">{{ groupLabels(m.resource_ids) }}</div>
-              <div class="record-sub">Абонемент: {{ formatDate(m.start_date) }} – {{ formatDate(m.end_date) }}<span v-if="m.contract_number"> · №{{ m.contract_number }}</span></div>
+              <div class="record-sub">Абонемент: {{ formatDate(m.start_date) }} – {{ formatDate(m.end_date) }}</div>
               <span class="status-badge" :class="effectiveStatus(m)">{{ membershipStatusLabel(effectiveStatus(m)) }}</span>
             </div>
           </div>
@@ -372,10 +373,7 @@ export default {
       return useAuthStore().canWrite;
     },
     groupOptions() {
-      return this.groups.map((g) => {
-        const names = this.trainers.filter((t) => t.resource_ids.includes(g.id)).map((t) => t.full_name);
-        return { value: g.id, label: names.length ? `${g.label} — ${names.join(', ')}` : g.label, color: g.color };
-      });
+      return this.groups.map((g) => ({ value: g.id, label: g.label, color: g.color }));
     },
     plainGroupOptions() {
       return this.groups.map((g) => ({ value: g.id, label: g.label }));
@@ -574,13 +572,34 @@ export default {
     },
     openAddClient() {
       this.editingClientId = null;
-      this.clientForm = { full_name: '', phone: '+7', age: null, parent_name: '', contract_number: '' };
+      this.clientForm = {
+        full_name: '',
+        phone: '+7',
+        age: null,
+        parent_name: '',
+        contract_number: String(this.nextContractNumber()),
+        contract_date: moment().format('YYYY-MM-DD'),
+      };
       this.showClientModal = true;
+    },
+    nextContractNumber() {
+      const maxNumber = this.clients.reduce((max, c) => {
+        const n = parseInt(c.contract_number, 10);
+        return Number.isFinite(n) && n > max ? n : max;
+      }, 0);
+      return maxNumber + 1;
     },
     onClientClick(c) {
       if (!this.canWrite) return;
       this.editingClientId = c.id;
-      this.clientForm = { full_name: c.full_name, phone: c.phone, age: c.age, parent_name: c.parent_name, contract_number: c.contract_number || '' };
+      this.clientForm = {
+        full_name: c.full_name,
+        phone: c.phone,
+        age: c.age,
+        parent_name: c.parent_name,
+        contract_number: c.contract_number || '',
+        contract_date: c.contract_date ? moment(c.contract_date).format('YYYY-MM-DD') : '',
+      };
       this.showClientModal = true;
     },
     async confirmClient() {
@@ -589,16 +608,20 @@ export default {
         return;
       }
       const body = { ...this.clientForm };
-      if (this.editingClientId) {
-        await apiFetch(`/clients/${this.editingClientId}?section=${this.sectionKey}`, { method: 'PUT', body });
-        this.showClientModal = false;
-        await this.loadClients();
-      } else {
-        const created = await apiFetch(`/clients?section=${this.sectionKey}`, { method: 'POST', body });
-        await this.loadClients();
-        // Карточка создана — сразу открываем её же в режиме редактирования,
-        // чтобы можно было без лишнего клика завести абонемент.
-        this.onClientClick(created);
+      try {
+        if (this.editingClientId) {
+          await apiFetch(`/clients/${this.editingClientId}?section=${this.sectionKey}`, { method: 'PUT', body });
+          this.showClientModal = false;
+          await this.loadClients();
+        } else {
+          const created = await apiFetch(`/clients?section=${this.sectionKey}`, { method: 'POST', body });
+          await this.loadClients();
+          // Карточка создана — сразу открываем её же в режиме редактирования,
+          // чтобы можно было без лишнего клика завести абонемент.
+          this.onClientClick(created);
+        }
+      } catch (e) {
+        await showAlert(e.message);
       }
     },
     async deleteClient() {
@@ -726,18 +749,24 @@ export default {
     attendanceMarkFor(membershipId, dateStr) {
       return this.attendanceMarks.find((a) => a.membership_id === membershipId && moment(a.date).format('YYYY-MM-DD') === dateStr);
     },
+    isDateInMembership(m, dateStr) {
+      return moment(dateStr).isBetween(m.start_date, m.end_date, 'day', '[]');
+    },
     attendanceCellMark(membershipId, dateStr) {
       const mark = this.attendanceMarkFor(membershipId, dateStr);
       if (!mark) return '';
       return mark.status === 'present' ? '✓' : '✕';
     },
-    attendanceCellClass(membershipId, dateStr) {
-      const mark = this.attendanceMarkFor(membershipId, dateStr);
+    attendanceCellClass(m, dateStr) {
+      if (!this.isDateInMembership(m, dateStr)) return 'out-of-range';
+      const mark = this.attendanceMarkFor(m.id, dateStr);
       if (!mark) return '';
       return mark.status;
     },
-    async toggleAttendance(membershipId, dateStr) {
+    async toggleAttendance(m, dateStr) {
       if (!this.canWrite) return;
+      if (!this.isDateInMembership(m, dateStr)) return;
+      const membershipId = m.id;
       // Cycle: blank -> present -> absent -> blank ... so an accidental click can be undone.
       const mark = this.attendanceMarkFor(membershipId, dateStr);
       if (mark && mark.status === 'absent') {
@@ -761,6 +790,13 @@ export default {
     },
 
     // ---------------- Пробные занятия ----------------
+    onDatePillClick() {
+      if (this.showAllTrialDates) {
+        this.showAllTrialDates = false;
+        return;
+      }
+      this.showTrialDateModal = true;
+    },
     onPickTrialDate(date) {
       this.trialDate = date;
       this.showTrialDateModal = false;
@@ -967,9 +1003,13 @@ export default {
   margin: 0;
 }
 
-.date-pill.disabled {
+.date-pill.active {
+  background: #2196f3;
+  color: #fff;
+}
+
+.date-pill.dimmed {
   opacity: 0.45;
-  cursor: not-allowed;
 }
 
 .pill-toggle-btn {
@@ -1176,6 +1216,11 @@ export default {
 .att-cell.absent {
   background: rgba(244, 67, 54, 0.12);
   color: #d32f2f;
+}
+
+.att-cell.out-of-range {
+  cursor: default;
+  background: transparent;
 }
 
 .attendance-legend {
