@@ -33,7 +33,7 @@
           <div class="record-bar" :style="{ background: clientBarColor(c.id) }"></div>
           <div class="record-body">
             <div class="record-title">{{ c.full_name }}</div>
-            <div class="record-sub">{{ c.phone }}<span v-if="c.age"> · {{ c.age }} лет</span></div>
+            <div class="record-sub">{{ c.phone }}<span v-if="c.age"> · {{ c.age }} лет</span><span v-if="c.contract_number"> · №{{ c.contract_number }}</span></div>
             <div class="record-sub">{{ clientActiveSummary(c.id) }}</div>
           </div>
         </div>
@@ -150,6 +150,7 @@
         <FormInput label="Телефон" type="tel" :model-value="clientForm.phone" @update:modelValue="clientForm.phone = $event" />
         <FormInput label="Возраст" type="number" :model-value="clientForm.age" @update:modelValue="clientForm.age = $event" />
         <FormInput label="ФИО родителя/опекуна" type="text" :model-value="clientForm.parent_name" @update:modelValue="clientForm.parent_name = $event" />
+        <FormInput label="Номер договора" type="text" :model-value="clientForm.contract_number" @update:modelValue="clientForm.contract_number = $event" />
 
         <template v-if="editingClientId">
           <div class="section-title">Абонементы</div>
@@ -177,7 +178,6 @@
     <!-- Модальное окно абонемента -->
     <DesktopModal v-model="showMembershipModal" :title="editingMembershipId ? 'Абонемент' : 'Новый абонемент'">
       <template v-if="membershipForm">
-        <FormInput label="Номер договора" type="text" :model-value="membershipForm.contract_number" @update:modelValue="membershipForm.contract_number = $event" />
         <FormSelect label="Группа" placeholder="Выберите группу" :model-value="membershipForm.resource_ids[0] || null" :options="groupOptions" @update:modelValue="membershipForm.resource_ids = $event ? [$event] : []" />
         <FormInput label="Дата оплаты" type="date" :model-value="membershipForm.payment_date" @update:modelValue="membershipForm.payment_date = $event" />
         <FormInput label="Абонемент с" type="date" :model-value="membershipForm.start_date" @update:modelValue="membershipForm.start_date = $event" />
@@ -517,13 +517,13 @@ export default {
     },
     openAddClient() {
       this.editingClientId = null;
-      this.clientForm = { full_name: '', phone: '+7', age: null, parent_name: '' };
+      this.clientForm = { full_name: '', phone: '+7', age: null, parent_name: '', contract_number: '' };
       this.showClientModal = true;
     },
     onClientClick(c) {
       if (!this.canWrite) return;
       this.editingClientId = c.id;
-      this.clientForm = { full_name: c.full_name, phone: c.phone, age: c.age, parent_name: c.parent_name };
+      this.clientForm = { full_name: c.full_name, phone: c.phone, age: c.age, parent_name: c.parent_name, contract_number: c.contract_number || '' };
       this.showClientModal = true;
     },
     async confirmClient() {
@@ -558,7 +558,6 @@ export default {
       this.editingMembershipId = null;
       this.membershipClientId = this.editingClientId;
       this.membershipForm = {
-        contract_number: String(this.memberships.length + 1),
         resource_ids: this.selectedGroupId ? [this.selectedGroupId] : [],
         payment_date: moment().format('YYYY-MM-DD'),
         start_date: moment().format('YYYY-MM-DD'),
@@ -573,7 +572,6 @@ export default {
       this.editingMembershipId = m.id;
       this.membershipClientId = m.client_id;
       this.membershipForm = {
-        contract_number: m.contract_number || '',
         resource_ids: [...m.resource_ids],
         payment_date: m.payment_date ? moment(m.payment_date).format('YYYY-MM-DD') : '',
         start_date: moment(m.start_date).format('YYYY-MM-DD'),
