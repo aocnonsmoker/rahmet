@@ -65,7 +65,7 @@
         :selected-group-id="selectedGroupId"
         active-view="week"
         :time-cell-height="40"
-        @edit-schedule="onScheduleClick"
+        @event-click="onScheduleEventClick"
       />
     </div>
 
@@ -86,7 +86,7 @@
         </div>
       </div>
       <template v-if="attendanceGroupId">
-        <div v-if="attendanceMemberships.length" class="attendance-table-wrap">
+        <div v-if="attendanceRows.length" class="attendance-table-wrap">
           <table class="attendance-table">
             <thead>
               <tr>
@@ -100,21 +100,21 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="m in attendanceMemberships" :key="m.id">
-                <td class="att-name-col">{{ m.full_name }}</td>
+              <tr v-for="row in attendanceRows" :key="row.client_id">
+                <td class="att-name-col">{{ row.full_name }}</td>
                 <td v-for="d in attendanceDays" :key="d.date" class="att-day-col">
                   <div
                     class="att-cell"
-                    :class="attendanceCellClass(m, d.date)"
-                    @click="toggleAttendance(m, d.date)"
-                  >{{ attendanceCellMark(m.id, d.date) }}</div>
+                    :class="attendanceCellClass(row, d.date)"
+                    @click="toggleAttendance(row, d.date)"
+                  >{{ attendanceCellMark(row, d.date) }}</div>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
         <div v-else class="empty-state">В этой группе нет клиентов</div>
-        <div v-if="attendanceMemberships.length" class="attendance-legend">
+        <div v-if="attendanceRows.length" class="attendance-legend">
           <span class="legend-item present">✓ Был</span>
           <span class="legend-item absent">✕ Пропуск</span>
         </div>
@@ -228,19 +228,6 @@
       </template>
     </DesktopModal>
 
-    <!-- Модальное окно расписания -->
-    <DesktopModal v-model="showScheduleModal" :title="editingScheduleId ? 'Расписание' : 'Новое расписание'">
-      <template v-if="scheduleForm">
-        <FormSelect label="Группа" placeholder="Выберите группу" :model-value="scheduleForm.resource_id" :options="plainGroupOptions" :disabled="!!editingScheduleId" @update:modelValue="scheduleForm.resource_id = $event" />
-        <FormSelect label="Зал" placeholder="Выберите зал" :model-value="scheduleForm.room_id" :options="roomOptions" @update:modelValue="scheduleForm.room_id = $event" />
-        <DayTimesPicker label="Дни и время" :model-value="scheduleForm.day_times" @update:modelValue="scheduleForm.day_times = $event" />
-      </template>
-      <template #footer>
-        <button v-if="editingScheduleId" class="pill-btn danger" type="button" @click="deleteSchedule">Удалить</button>
-        <button class="pill-btn ghost" type="button" @click="showScheduleModal = false">Отменить</button>
-        <button class="pill-btn primary" type="button" @click="confirmSchedule">Сохранить</button>
-      </template>
-    </DesktopModal>
   </ion-page>
 </template>
 
@@ -253,7 +240,6 @@ import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
 import MonthCalendar from '@/components/MonthCalendar.vue';
 import ScheduleCalendar from '@/components/ScheduleCalendar.vue';
-import DayTimesPicker from '@/components/DayTimesPicker.vue';
 import { apiFetch } from '@/services/api';
 import { showAlert, showConfirm, showToast } from '@/services/dialogs';
 import { useAuthStore } from '@/stores/auth';
@@ -271,7 +257,7 @@ const TRIAL_STATUS_LABELS = {
 
 export default {
   name: 'DesktopClubView',
-  components: { IonPage, IonIcon, DesktopModal, FormInput, FormSelect, MonthCalendar, ScheduleCalendar, DayTimesPicker },
+  components: { IonPage, IonIcon, DesktopModal, FormInput, FormSelect, MonthCalendar, ScheduleCalendar },
   props: {
     sectionKey: { type: String, required: true },
     label: { type: String, required: true },
@@ -288,10 +274,6 @@ export default {
       memberships: [],
       trialLessons: [],
       schedules: [],
-
-      showScheduleModal: false,
-      editingScheduleId: null,
-      scheduleForm: null,
 
       showClientModal: false,
       editingClientId: null,
@@ -366,9 +348,6 @@ export default {
         .filter((t) => !this.selectedTrialStatus || t.status === this.selectedTrialStatus)
         .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
     },
-    roomOptions() {
-      return this.rooms.map((r) => ({ value: r.id, label: r.label }));
-    },
     monthLabel() {
       const date = moment(this.attendanceMonth, 'YYYY-MM').toDate();
       const str = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(date);
@@ -391,6 +370,19 @@ export default {
         cursor.add(1, 'day');
       }
       return days;
+    },
+    // Клиент может держать сразу несколько абонементов подряд (например,
+    // продлил заранее) — в табеле у него всё равно одна строка, а нужный
+    // абонемент для конкретной даты выбирается через membershipForDate.
+    attendanceRows() {
+      const byClient = new Map();
+      for (const m of this.attendanceMemberships) {
+        if (!byClient.has(m.client_id)) {
+          byClient.set(m.client_id, { client_id: m.client_id, full_name: m.full_name, memberships: [] });
+        }
+        byClient.get(m.client_id).memberships.push(m);
+      }
+      return [...byClient.values()];
     },
   },
   async mounted() {
@@ -640,40 +632,11 @@ export default {
     },
 
     // ---------------- Расписание ----------------
-    onScheduleClick(s) {
-      if (!this.canWrite) return;
-      this.editingScheduleId = s.id;
-      this.scheduleForm = {
-        resource_id: s.resource_id,
-        room_id: s.room_id,
-        day_times: s.day_times.map((dt) => ({ ...dt })),
-      };
-      this.showScheduleModal = true;
-    },
-    async confirmSchedule() {
-      if (
-        !this.scheduleForm.resource_id
-        || !this.scheduleForm.room_id
-        || !this.scheduleForm.day_times.length
-        || this.scheduleForm.day_times.some((dt) => !dt.start_time || !dt.end_time)
-      ) {
-        await showAlert('Заполните группу, зал и время для каждого выбранного дня');
-        return;
-      }
-      const body = { ...this.scheduleForm };
-      const url = this.editingScheduleId
-        ? `/group_schedules/${this.editingScheduleId}?section=${this.sectionKey}`
-        : `/group_schedules?section=${this.sectionKey}`;
-      await apiFetch(url, { method: this.editingScheduleId ? 'PUT' : 'POST', body });
-      this.showScheduleModal = false;
-      await this.loadSchedules();
-    },
-    async deleteSchedule() {
-      const ok = await showConfirm('Удалить это расписание?', { header: 'Удаление', confirmText: 'Удалить' });
-      if (!ok) return;
-      await apiFetch(`/group_schedules/${this.editingScheduleId}?section=${this.sectionKey}`, { method: 'DELETE' });
-      this.showScheduleModal = false;
-      await this.loadSchedules();
+    onScheduleEventClick(s) {
+      this.tab = 'attendance';
+      this.selectedGroupId = s.resource_id;
+      this.attendanceGroupId = s.resource_id;
+      this.loadAttendance();
     },
 
     // ---------------- Журнал ----------------
@@ -705,20 +668,30 @@ export default {
     isDateInMembership(m, dateStr) {
       return moment(dateStr).isBetween(m.start_date, m.end_date, 'day', '[]');
     },
-    attendanceCellMark(membershipId, dateStr) {
-      const mark = this.attendanceMarkFor(membershipId, dateStr);
+    // Строка в табеле — это клиент, а не абонемент, так что для каждой даты
+    // нужно найти тот из его абонементов, что её покрывает (их периоды не
+    // пересекаются).
+    membershipForDate(row, dateStr) {
+      return row.memberships.find((m) => this.isDateInMembership(m, dateStr));
+    },
+    attendanceCellMark(row, dateStr) {
+      const m = this.membershipForDate(row, dateStr);
+      if (!m) return '';
+      const mark = this.attendanceMarkFor(m.id, dateStr);
       if (!mark) return '';
       return mark.status === 'present' ? '✓' : '✕';
     },
-    attendanceCellClass(m, dateStr) {
-      if (!this.isDateInMembership(m, dateStr)) return 'out-of-range';
+    attendanceCellClass(row, dateStr) {
+      const m = this.membershipForDate(row, dateStr);
+      if (!m) return 'out-of-range';
       const mark = this.attendanceMarkFor(m.id, dateStr);
       if (!mark) return '';
       return mark.status;
     },
-    async toggleAttendance(m, dateStr) {
+    async toggleAttendance(row, dateStr) {
       if (!this.canWrite) return;
-      if (!this.isDateInMembership(m, dateStr)) return;
+      const m = this.membershipForDate(row, dateStr);
+      if (!m) return;
       const membershipId = m.id;
       // Cycle: blank -> present -> absent -> blank ... so an accidental click can be undone.
       const mark = this.attendanceMarkFor(membershipId, dateStr);
@@ -1115,6 +1088,7 @@ export default {
 .attendance-table {
   border-collapse: collapse;
   width: 100%;
+  table-layout: fixed;
 }
 
 .attendance-table th,
@@ -1130,21 +1104,19 @@ export default {
 .att-name-col {
   position: sticky;
   left: 0;
+  width: 25%;
   background: #ffffff;
   text-align: left;
   font-weight: 700;
   color: #2196f3;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
   padding-left: 16px;
   z-index: 1;
 }
 
 .attendance-table thead .att-name-col {
   color: #1c1c1e;
-}
-
-.att-day-col {
-  width: 44px;
 }
 
 .attendance-day-label {
@@ -1165,6 +1137,7 @@ export default {
   color: #9aa0a6;
   width: 36px;
   height: 36px;
+  margin: 0 auto;
   border-radius: 10px;
   background: #eef0f0;
   display: flex;

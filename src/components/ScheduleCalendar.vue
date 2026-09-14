@@ -57,7 +57,7 @@ export default {
     timeCellHeight: { type: Number, default: 90 },
     fillHeight: { type: Boolean, default: false },
   },
-  emits: ['edit-schedule'],
+  emits: ['event-click'],
   data() {
     return {
       ruLocale,
@@ -149,7 +149,7 @@ export default {
       this.rangeEnd = params.endDate;
     },
     onEventClick(event) {
-      this.$emit('edit-schedule', event.scheduleRef);
+      this.$emit('event-click', event.scheduleRef);
     },
   },
 };
