@@ -673,8 +673,10 @@ export default {
 
     // ---------------- Расписание ----------------
     onScheduleEventClick(s) {
+      // Не трогаем selectedGroupId — это фильтр секций в шапке, общий для
+      // всех вкладок. Если менять его тут, при возврате на Расписание он
+      // остаётся на этой группе вместо "Все секции".
       this.tab = 'attendance';
-      this.selectedGroupId = s.resource_id;
       this.attendanceGroupId = s.resource_id;
       this.loadAttendance();
     },
