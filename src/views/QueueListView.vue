@@ -150,6 +150,11 @@ function computeBusinessDay(date) {
   return d.format("YYYY-MM-DD");
 }
 
+// Records are fetched in a window around the day being viewed instead of the whole
+// section history (which only grows over time) — re-fetched when the date picker
+// moves outside the currently loaded window.
+const RECORDS_WINDOW_DAYS = 30;
+
 export default {
   name: 'QueueListView',
   components: {
@@ -173,6 +178,8 @@ export default {
     return {
       refreshIcon: refreshOutline,
       allRecords: [],
+      loadedRangeStart: null,
+      loadedRangeEnd: null,
       today: computeBusinessDay(new Date()),
       showDateModal: false,
       showRecord: false,
@@ -207,15 +214,40 @@ export default {
   async mounted() {
     await this.getRecords();
   },
+  watch: {
+    today(newDate) {
+      if (!this.isDateLoaded(newDate)) {
+        this.getRecords();
+      }
+    },
+  },
   methods: {
     async getRecords() {
-      const result = await apiFetch(`/records?section=${this.sectionKey}`);
+      const center = moment(this.today, "YYYY-MM-DD");
+      // Plain strings, not moment instances — see TimeSlotBookingView.vue's getRecords
+      // for why (Vue reactivity proxy breaks moment's internal comparison methods).
+      const rangeStart = center.clone().subtract(RECORDS_WINDOW_DAYS, "days").startOf("day").format("YYYY-MM-DD HH:mm:ss");
+      const rangeEnd = center.clone().add(RECORDS_WINDOW_DAYS, "days").startOf("day").format("YYYY-MM-DD HH:mm:ss");
+      const params = new URLSearchParams({
+        section: this.sectionKey,
+        start: rangeStart,
+        end: rangeEnd,
+      });
+      const result = await apiFetch(`/records?${params}`);
       const all = [];
       for (const r of result) {
         r.start = r.start.replace("T", " ").slice(0, -3);
         all.push(r)
       }
       this.allRecords = all;
+      this.loadedRangeStart = rangeStart;
+      this.loadedRangeEnd = rangeEnd;
+    },
+    isDateLoaded(date) {
+      if (!this.loadedRangeStart || !this.loadedRangeEnd) return false;
+      const d = moment(date, "YYYY-MM-DD");
+      const fmt = "YYYY-MM-DD HH:mm:ss";
+      return d.isSameOrAfter(moment(this.loadedRangeStart, fmt)) && d.isBefore(moment(this.loadedRangeEnd, fmt));
     },
     onPickDate(date) {
       this.today = date;

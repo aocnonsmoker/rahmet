@@ -8,6 +8,7 @@
         :type="type"
         :placeholder="placeholder"
         :value="modelValue"
+        :disabled="disabled"
         @input="$emit('update:modelValue', $event.target.value)"
       />
       <span v-if="suffix" class="ff-suffix" :class="{ 'with-stepper': type === 'number' }">{{ suffix }}</span>
@@ -46,6 +47,10 @@ export default {
     step: {
       type: Number,
       default: 1,
+    },
+    disabled: {
+      type: Boolean,
+      default: false,
     },
   },
   emits: ["update:modelValue"],
@@ -106,6 +111,11 @@ export default {
 
 .ff-input[type="number"] {
   -moz-appearance: textfield;
+}
+
+.ff-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .ff-suffix {

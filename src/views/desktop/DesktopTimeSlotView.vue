@@ -155,6 +155,11 @@ function computeBusinessDay(date) {
   return d.format('YYYY-MM-DD');
 }
 
+// Records are fetched in a window around the day being viewed instead of the whole
+// section history (which only grows over time) — re-fetched when day navigation
+// moves outside the currently loaded window.
+const RECORDS_WINDOW_DAYS = 30;
+
 export default {
   name: 'DesktopTimeSlotView',
   components: { IonPage, IonIcon, DesktopModal, DateTimeWheel, FormInput, FormSelect, MonthCalendar },
@@ -175,6 +180,8 @@ export default {
       today,
       now,
       records: [],
+      loadedRangeStart: null,
+      loadedRangeEnd: null,
       slotHeight: 90,
       columnWidth: 160,
       resources: [],
@@ -263,6 +270,13 @@ export default {
     clearInterval(this._nowTimer);
     window.removeEventListener('resize', this.updateColumnWidth);
   },
+  watch: {
+    selectedDate(newDate) {
+      if (!this.isDateLoaded(newDate)) {
+        this.getRecords();
+      }
+    },
+  },
   methods: {
     async loadResources() {
       this.resources = await apiFetch(`/resources?section=${this.sectionKey}`);
@@ -286,12 +300,30 @@ export default {
       return this.resources.find((r) => r.id === Number(id));
     },
     async getRecords() {
-      const result = await apiFetch(`/records?section=${this.sectionKey}`);
+      const center = moment(this.selectedDate, 'YYYY-MM-DD');
+      // Plain strings, not moment instances — see mobile TimeSlotBookingView.vue's
+      // getRecords for why (Vue reactivity proxy breaks moment's comparison methods).
+      const rangeStart = center.clone().subtract(RECORDS_WINDOW_DAYS, 'days').startOf('day').format('YYYY-MM-DD HH:mm:ss');
+      const rangeEnd = center.clone().add(RECORDS_WINDOW_DAYS, 'days').startOf('day').format('YYYY-MM-DD HH:mm:ss');
+      const params = new URLSearchParams({
+        section: this.sectionKey,
+        start: rangeStart,
+        end: rangeEnd,
+      });
+      const result = await apiFetch(`/records?${params}`);
       this.records = result.map((r) => ({
         ...r,
         start: r.start.replace('T', ' ').slice(0, -3),
         end: r.end.replace('T', ' ').slice(0, -3),
       }));
+      this.loadedRangeStart = rangeStart;
+      this.loadedRangeEnd = rangeEnd;
+    },
+    isDateLoaded(date) {
+      if (!this.loadedRangeStart || !this.loadedRangeEnd) return false;
+      const d = moment(date, 'YYYY-MM-DD');
+      const fmt = 'YYYY-MM-DD HH:mm:ss';
+      return d.isSameOrAfter(moment(this.loadedRangeStart, fmt)) && d.isBefore(moment(this.loadedRangeEnd, fmt));
     },
     recordsForResource(resourceId) {
       const start = this.businessStart;

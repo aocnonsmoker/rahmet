@@ -294,6 +294,11 @@ function computeBusinessDay(date) {
   return d.format("YYYY-MM-DD");
 }
 
+// Records are fetched in a window around the day being viewed instead of the whole
+// section history (which only grows over time) — re-fetched when day navigation
+// moves outside the currently loaded window.
+const RECORDS_WINDOW_DAYS = 30;
+
 export default {
   name: "TimeSlotBookingView",
   components: {
@@ -327,6 +332,8 @@ export default {
       today,
       now,
       records: [],
+      loadedRangeStart: null,
+      loadedRangeEnd: null,
       slotHeight: 50,
       columnWidth: 90,
       resources: [],
@@ -422,6 +429,13 @@ export default {
       return this.minuteSteps.map((m) => ({ value: m, label: String(m) }));
     },
   },
+  watch: {
+    selectedDate(newDate) {
+      if (!this.isDateLoaded(newDate)) {
+        this.getRecords();
+      }
+    },
+  },
   async mounted() {
     await Promise.all([this.getRecords(), this.loadResources()]);
     this.scrollToCurrentTime();
@@ -458,12 +472,33 @@ export default {
     },
     async getRecords() {
         this.records = [];
-        const result = await apiFetch(`/records?section=${this.sectionKey}`);
+        const center = moment(this.selectedDate, "YYYY-MM-DD");
+        // Stored as plain strings, not moment instances — a moment object kept in
+        // Vue reactive data gets wrapped in a reactivity Proxy, which breaks its
+        // internal comparison methods (isDateLoaded silently always returned false,
+        // triggering a refetch on every single day-navigation click instead of only
+        // when actually leaving the loaded window — caught via live UI testing).
+        const rangeStart = center.clone().subtract(RECORDS_WINDOW_DAYS, "days").startOf("day").format("YYYY-MM-DD HH:mm:ss");
+        const rangeEnd = center.clone().add(RECORDS_WINDOW_DAYS, "days").startOf("day").format("YYYY-MM-DD HH:mm:ss");
+        const params = new URLSearchParams({
+          section: this.sectionKey,
+          start: rangeStart,
+          end: rangeEnd,
+        });
+        const result = await apiFetch(`/records?${params}`);
         for (const r of result) {
           r.start = r.start.replace("T", " ").slice(0, -3);
           r.end = r.end.replace("T", " ").slice(0, -3);
           this.records.push(r)
         }
+        this.loadedRangeStart = rangeStart;
+        this.loadedRangeEnd = rangeEnd;
+    },
+    isDateLoaded(date) {
+      if (!this.loadedRangeStart || !this.loadedRangeEnd) return false;
+      const d = moment(date, "YYYY-MM-DD");
+      const fmt = "YYYY-MM-DD HH:mm:ss";
+      return d.isSameOrAfter(moment(this.loadedRangeStart, fmt)) && d.isBefore(moment(this.loadedRangeEnd, fmt));
     },
     recordsForResource(resourceId) {
       const start = this.businessStart;

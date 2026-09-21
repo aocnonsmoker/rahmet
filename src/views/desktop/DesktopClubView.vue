@@ -45,7 +45,8 @@
     <div v-if="tab === 'trainers'" class="tab-panel wide">
       <div class="cards-grid">
         <div v-for="t in visibleTrainers" :key="t.id" class="record-card" @click="onTrainerClick(t)">
-          <div class="record-bar"></div>
+          <div v-if="t.photo_url" class="record-avatar" :style="{ backgroundImage: `url(${t.photo_url})` }"></div>
+          <div v-else class="record-bar"></div>
           <div class="record-body">
             <div class="record-title">{{ t.full_name }}</div>
             <div class="record-sub">{{ t.phone || '—' }}</div>
@@ -117,6 +118,15 @@
         <div v-if="attendanceRows.length" class="attendance-legend">
           <span class="legend-item present">✓ Был</span>
           <span class="legend-item absent">✕ Пропуск</span>
+          <span class="legend-item trainer_cancelled">⊘ Отменил тренер</span>
+          <span class="legend-item makeup">↻ Отработка</span>
+          <span class="legend-item frozen">❄ Заморожен</span>
+        </div>
+        <div v-if="attendanceRows.length && canWrite" class="attendance-mode-row">
+          <span class="attendance-mode-label">Режим отметки:</span>
+          <button class="mode-btn" type="button" :class="{ active: attendanceMarkMode === 'normal' }" @click="attendanceMarkMode = 'normal'">Обычная</button>
+          <button class="mode-btn" type="button" :class="{ active: attendanceMarkMode === 'trainer_cancelled' }" @click="attendanceMarkMode = 'trainer_cancelled'">Отмена тренером</button>
+          <button class="mode-btn" type="button" :class="{ active: attendanceMarkMode === 'makeup' }" @click="attendanceMarkMode = 'makeup'">Отработка</button>
         </div>
       </template>
       <div v-else class="empty-state">Выберите группу, чтобы увидеть табель</div>
@@ -185,8 +195,8 @@
       <template v-if="membershipForm">
         <FormSelect label="Группа" placeholder="Выберите группу" :model-value="membershipForm.resource_ids[0] || null" :options="groupOptions" @update:modelValue="membershipForm.resource_ids = $event ? [$event] : []" />
         <FormInput label="Дата оплаты" type="date" :model-value="membershipForm.payment_date" @update:modelValue="membershipForm.payment_date = $event" />
-        <FormInput label="Абонемент с" type="date" :model-value="membershipForm.start_date" @update:modelValue="membershipForm.start_date = $event" />
-        <FormInput label="Абонемент по" type="date" :model-value="membershipForm.end_date" @update:modelValue="membershipForm.end_date = $event" />
+        <FormInput label="Абонемент с" type="date" :model-value="membershipForm.start_date" @update:modelValue="onMembershipStartDateChange" />
+        <FormInput label="Абонемент по" type="date" :model-value="membershipForm.end_date" :disabled="!isOwner" @update:modelValue="membershipForm.end_date = $event" />
         <FormInput label="Сумма" type="number" suffix="тг." :model-value="membershipForm.price" @update:modelValue="membershipForm.price = $event" />
         <FormSelect label="Статус" :model-value="membershipForm.status" :options="membershipStatusOptions" @update:modelValue="membershipForm.status = $event" />
         <button v-if="editingMembershipId" class="pill-btn danger" type="button" @click="deleteMembership">Удалить абонемент</button>
@@ -217,6 +227,21 @@
     <!-- Модальное окно тренера -->
     <DesktopModal v-model="showTrainerModal" :title="editingTrainerId ? 'Тренер' : 'Новый тренер'">
       <template v-if="trainerForm">
+        <div class="trainer-photo-field">
+          <img
+            v-if="trainerForm.photo_url"
+            :src="trainerForm.photo_url"
+            class="trainer-photo-preview trainer-photo-preview-editable"
+            title="Нажмите, чтобы изменить масштаб и положение"
+            @click="openPhotoEditor(trainerForm.photo_url)"
+          />
+          <div v-else class="trainer-photo-placeholder">Фото</div>
+          <label class="trainer-photo-btn">
+            {{ trainerForm.photo_url ? 'Заменить фото' : 'Добавить фото' }}
+            <input type="file" accept="image/*" class="trainer-photo-input" @change="onTrainerPhotoChange" />
+          </label>
+        </div>
+        <PhotoCropper v-if="photoEditorSrc" :image-src="photoEditorSrc" @confirm="onPhotoCropConfirm" @cancel="photoEditorSrc = null" />
         <FormInput label="ФИО" type="text" :model-value="trainerForm.full_name" @update:modelValue="trainerForm.full_name = $event" />
         <FormInput label="Телефон" type="tel" :model-value="trainerForm.phone" @update:modelValue="trainerForm.phone = $event" />
         <FormSelect label="Группы" placeholder="Выберите группы" multiple :model-value="trainerForm.resource_ids" :options="plainGroupOptions" @update:modelValue="trainerForm.resource_ids = $event" />
@@ -238,6 +263,7 @@ import { refreshOutline } from 'ionicons/icons';
 import DesktopModal from '@/components/desktop/DesktopModal.vue';
 import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
+import PhotoCropper from '@/components/PhotoCropper.vue';
 import MonthCalendar from '@/components/MonthCalendar.vue';
 import ScheduleCalendar from '@/components/ScheduleCalendar.vue';
 import { apiFetch } from '@/services/api';
@@ -246,6 +272,7 @@ import { useAuthStore } from '@/stores/auth';
 import { ruDayShort } from '@/utils/ruDate';
 
 const MEMBERSHIP_STATUS_LABELS = { active: 'Активен', expired: 'Закончился', frozen: 'Заморожен' };
+const ATTENDANCE_MARK_ICONS = { present: '✓', absent: '✕', trainer_cancelled: '⊘', makeup: '↻' };
 const TRIAL_STATUS_LABELS = {
   scheduled: 'Записан',
   came: 'Пришёл',
@@ -257,7 +284,7 @@ const TRIAL_STATUS_LABELS = {
 
 export default {
   name: 'DesktopClubView',
-  components: { IonPage, IonIcon, DesktopModal, FormInput, FormSelect, MonthCalendar, ScheduleCalendar },
+  components: { IonPage, IonIcon, DesktopModal, FormInput, FormSelect, PhotoCropper, MonthCalendar, ScheduleCalendar },
   props: {
     sectionKey: { type: String, required: true },
     label: { type: String, required: true },
@@ -296,16 +323,21 @@ export default {
       showTrainerModal: false,
       editingTrainerId: null,
       trainerForm: null,
+      photoEditorSrc: null,
 
       attendanceGroupId: null,
       attendanceMonth: moment().format('YYYY-MM'),
       attendanceMemberships: [],
       attendanceMarks: [],
+      attendanceMarkMode: 'normal',
     };
   },
   computed: {
     canWrite() {
       return useAuthStore().canWrite;
+    },
+    isOwner() {
+      return useAuthStore().isOwner;
     },
     groupOptions() {
       return this.groups.map((g) => ({ value: g.id, label: g.label, color: g.color }));
@@ -582,15 +614,26 @@ export default {
     openAddMembershipForClient() {
       this.editingMembershipId = null;
       this.membershipClientId = this.editingClientId;
+      const startDate = moment().format('YYYY-MM-DD');
       this.membershipForm = {
         resource_ids: this.selectedGroupId ? [this.selectedGroupId] : [],
-        payment_date: moment().format('YYYY-MM-DD'),
-        start_date: moment().format('YYYY-MM-DD'),
-        end_date: moment().add(1, 'month').format('YYYY-MM-DD'),
+        payment_date: startDate,
+        start_date: startDate,
+        end_date: this.autoEndDate(startDate),
         price: null,
         status: 'active',
       };
       this.showMembershipModal = true;
+    },
+    // Абонемент "по умолчанию" длится месяц минус день (16 сент. -> 15 окт.).
+    // Ресепшену дату "по" редактировать нельзя (см. isOwner в шаблоне) — только
+    // так пересчитывается автоматически; владелец может подправить вручную.
+    autoEndDate(startDateStr) {
+      return moment(startDateStr, 'YYYY-MM-DD').add(1, 'month').subtract(1, 'day').format('YYYY-MM-DD');
+    },
+    onMembershipStartDateChange(value) {
+      this.membershipForm.start_date = value;
+      this.membershipForm.end_date = this.autoEndDate(value);
     },
     onMembershipClick(m) {
       if (!this.canWrite) return;
@@ -670,6 +713,12 @@ export default {
     isDateInMembership(m, dateStr) {
       return moment(dateStr).isBetween(m.start_date, m.end_date, 'day', '[]');
     },
+    // С даты заморозки (включительно) и до разморозки — дни считаются
+    // замороженными: посещаемость по ним не отмечается, но в журнале это
+    // видно отдельным значком, а не просто пустой клеткой.
+    isDateFrozen(m, dateStr) {
+      return m.status === 'frozen' && !!m.frozen_at && !moment(dateStr).isBefore(m.frozen_at, 'day');
+    },
     // Строка в табеле — это клиент, а не абонемент, так что для каждой даты
     // нужно найти тот из его абонементов, что её покрывает (их периоды не
     // пересекаются).
@@ -679,35 +728,23 @@ export default {
     attendanceCellMark(row, dateStr) {
       const m = this.membershipForDate(row, dateStr);
       if (!m) return '';
+      if (this.isDateFrozen(m, dateStr)) return '❄';
       const mark = this.attendanceMarkFor(m.id, dateStr);
       if (!mark) return '';
-      return mark.status === 'present' ? '✓' : '✕';
+      return ATTENDANCE_MARK_ICONS[mark.status] || '';
     },
     attendanceCellClass(row, dateStr) {
       const m = this.membershipForDate(row, dateStr);
       if (!m) return 'out-of-range';
+      if (this.isDateFrozen(m, dateStr)) return 'frozen';
       const mark = this.attendanceMarkFor(m.id, dateStr);
       if (!mark) return '';
       return mark.status;
     },
-    async toggleAttendance(row, dateStr) {
-      if (!this.canWrite) return;
-      const m = this.membershipForDate(row, dateStr);
-      if (!m) return;
-      const membershipId = m.id;
-      // Cycle: blank -> present -> absent -> blank ... so an accidental click can be undone.
-      const mark = this.attendanceMarkFor(membershipId, dateStr);
-      if (mark && mark.status === 'absent') {
-        await apiFetch(`/attendance?section=${this.sectionKey}&membership_id=${membershipId}&date=${dateStr}`, {
-          method: 'DELETE',
-        });
-        this.attendanceMarks = this.attendanceMarks.filter((a) => a.id !== mark.id);
-        return;
-      }
-      const nextStatus = mark ? 'absent' : 'present';
+    async setAttendanceMark(membershipId, dateStr, status) {
       const updated = await apiFetch(`/attendance?section=${this.sectionKey}`, {
         method: 'POST',
-        body: { membership_id: membershipId, date: dateStr, status: nextStatus },
+        body: { membership_id: membershipId, date: dateStr, status },
       });
       const idx = this.attendanceMarks.findIndex((a) => a.id === updated.id);
       if (idx >= 0) {
@@ -715,6 +752,37 @@ export default {
       } else {
         this.attendanceMarks.push(updated);
       }
+    },
+    async clearAttendanceMark(membershipId, dateStr, markId) {
+      await apiFetch(`/attendance?section=${this.sectionKey}&membership_id=${membershipId}&date=${dateStr}`, {
+        method: 'DELETE',
+      });
+      this.attendanceMarks = this.attendanceMarks.filter((a) => a.id !== markId);
+    },
+    async toggleAttendance(row, dateStr) {
+      if (!this.canWrite) return;
+      const m = this.membershipForDate(row, dateStr);
+      if (!m) return;
+      if (this.isDateFrozen(m, dateStr)) return;
+      const membershipId = m.id;
+      const mark = this.attendanceMarkFor(membershipId, dateStr);
+      // Режимы "Отмена тренером"/"Отработка" — отдельная отметка, не мешает
+      // обычному циклу присутствия/пропуска на других днях.
+      if (this.attendanceMarkMode !== 'normal') {
+        if (mark && mark.status === this.attendanceMarkMode) {
+          await this.clearAttendanceMark(membershipId, dateStr, mark.id);
+        } else {
+          await this.setAttendanceMark(membershipId, dateStr, this.attendanceMarkMode);
+        }
+        return;
+      }
+      // Cycle: blank -> present -> absent -> blank ... so an accidental click can be undone.
+      if (mark && mark.status === 'absent') {
+        await this.clearAttendanceMark(membershipId, dateStr, mark.id);
+        return;
+      }
+      const nextStatus = mark ? 'absent' : 'present';
+      await this.setAttendanceMark(membershipId, dateStr, nextStatus);
     },
 
     // ---------------- Пробные занятия ----------------
@@ -771,14 +839,34 @@ export default {
     // ---------------- Тренеры ----------------
     openAddTrainer() {
       this.editingTrainerId = null;
-      this.trainerForm = { full_name: '', phone: '+7', resource_ids: this.selectedGroupId ? [this.selectedGroupId] : [] };
+      this.trainerForm = { full_name: '', phone: '+7', photo_url: null, resource_ids: this.selectedGroupId ? [this.selectedGroupId] : [] };
       this.showTrainerModal = true;
     },
     onTrainerClick(t) {
       if (!this.canWrite) return;
       this.editingTrainerId = t.id;
-      this.trainerForm = { full_name: t.full_name, phone: t.phone, resource_ids: [...t.resource_ids] };
+      this.trainerForm = { full_name: t.full_name, phone: t.phone, photo_url: t.photo_url || null, resource_ids: [...t.resource_ids] };
       this.showTrainerModal = true;
+    },
+    // Фото хранится как data-URL прямо в БД — фотографий тренеров немного,
+    // а отдельная файловая раздача на сервере не нужна. Кроп/масштаб
+    // настраиваются в PhotoCropper, итог сохраняется уже как готовый аватар.
+    onTrainerPhotoChange(event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = '';
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.photoEditorSrc = reader.result;
+      };
+      reader.readAsDataURL(file);
+    },
+    openPhotoEditor(src) {
+      this.photoEditorSrc = src;
+    },
+    onPhotoCropConfirm(dataUrl) {
+      this.trainerForm.photo_url = dataUrl;
+      this.photoEditorSrc = null;
     },
     async confirmTrainer() {
       if (!this.trainerForm.full_name.trim()) {
@@ -992,6 +1080,64 @@ export default {
   flex-shrink: 0;
 }
 
+.record-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  background-color: #eef0f0;
+  flex-shrink: 0;
+}
+
+.trainer-photo-field {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.trainer-photo-preview,
+.trainer-photo-placeholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #eef0f0;
+  flex-shrink: 0;
+}
+
+.trainer-photo-preview-editable {
+  cursor: pointer;
+}
+
+.trainer-photo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9aa0a6;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.trainer-photo-btn {
+  position: relative;
+  background: #eef0f0;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #1c1c1e;
+  cursor: pointer;
+}
+
+.trainer-photo-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .record-title {
   font-weight: 700;
   font-size: 1.02rem;
@@ -1163,9 +1309,26 @@ export default {
   background: transparent;
 }
 
+.att-cell.trainer_cancelled {
+  background: rgba(255, 152, 0, 0.16);
+  color: #e65100;
+}
+
+.att-cell.makeup {
+  background: rgba(33, 150, 243, 0.16);
+  color: #1565c0;
+}
+
+.att-cell.frozen {
+  background: rgba(96, 125, 139, 0.18);
+  color: #455a64;
+  cursor: default;
+}
+
 .attendance-legend {
   display: flex;
   gap: 20px;
+  flex-wrap: wrap;
   margin-top: 14px;
   font-size: 0.85rem;
   font-weight: 600;
@@ -1177,6 +1340,48 @@ export default {
 
 .legend-item.absent {
   color: #d32f2f;
+}
+
+.legend-item.trainer_cancelled {
+  color: #e65100;
+}
+
+.legend-item.makeup {
+  color: #1565c0;
+}
+
+.legend-item.frozen {
+  color: #455a64;
+}
+
+.attendance-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.attendance-mode-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6a6f75;
+}
+
+.mode-btn {
+  border: none;
+  background: #eef0f0;
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1c1c1e;
+  cursor: pointer;
+}
+
+.mode-btn.active {
+  background: #1c1c1e;
+  color: #ffffff;
 }
 
 .pill-btn {
