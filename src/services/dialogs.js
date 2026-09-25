@@ -13,6 +13,15 @@ export async function showAlert(message, header = '') {
   await alert.onDidDismiss();
 }
 
+// ion-toast positions itself with `:host { position: absolute; top: 0 }` —
+// Ionic doesn't stack multiple simultaneous toasts on its own, so back-to-back
+// calls (e.g. expiring + debt warnings on load) render exactly on top of each
+// other. Track how many are currently up and push each new one down by an
+// inline `top` offset (overrides the shadow-DOM default, no ::part needed
+// since `top` isn't an exposed part on ion-toast's wrapper).
+let openToastCount = 0;
+const TOAST_STACK_GAP = 60;
+
 export async function showToast(message, { color = 'warning', duration = 6000 } = {}) {
   const toast = await toastController.create({
     message,
@@ -20,6 +29,11 @@ export async function showToast(message, { color = 'warning', duration = 6000 } 
     color,
     position: 'top',
     buttons: [{ text: '✕', role: 'cancel' }],
+  });
+  toast.style.top = `${openToastCount * TOAST_STACK_GAP}px`;
+  openToastCount += 1;
+  toast.onDidDismiss().then(() => {
+    openToastCount = Math.max(0, openToastCount - 1);
   });
   await toast.present();
 }

@@ -6,16 +6,20 @@
         <ion-icon :icon="refreshIcon"></ion-icon>
         Обновить
       </button>
-      <FormSelect
-        class="header-group-filter"
-        placeholder="Все секции"
-        :model-value="selectedGroupId"
-        :options="groupFilterOptions"
-        @update:modelValue="selectedGroupId = $event"
-      />
       <button v-if="tab === 'clients' && canWrite" class="primary-btn" type="button" @click="openAddClient">+ Добавить клиента</button>
       <button v-if="tab === 'trials' && canWrite" class="primary-btn" type="button" @click="openAddTrial">+ Записать на пробное</button>
       <button v-if="tab === 'trainers' && canWrite" class="primary-btn" type="button" @click="openAddTrainer">+ Добавить тренера</button>
+    </div>
+
+    <div class="section-buttons-row">
+      <button
+        v-for="opt in groupFilterOptions"
+        :key="opt.value ?? 'all'"
+        type="button"
+        class="section-btn"
+        :class="{ active: selectedGroupId === opt.value }"
+        @click="selectedGroupId = opt.value"
+      >{{ opt.label }}</button>
     </div>
 
     <div class="tabs-row">
@@ -30,9 +34,14 @@
     <div v-if="tab === 'clients'" class="tab-panel wide">
       <div class="cards-grid">
         <div v-for="c in visibleClients" :key="c.id" class="record-card" @click="onClientClick(c)">
-          <div class="record-bar" :style="{ background: clientBarColor(c.id) }"></div>
+          <div class="record-bar" :style="{ background: clientStatusColor(c.id) }"></div>
           <div class="record-body">
-            <div class="record-title">{{ c.full_name }}</div>
+            <div class="record-title-row">
+              <div class="record-title">{{ c.full_name }}</div>
+              <span class="status-pill" :class="clientStatus(c.id)">
+                <span class="status-pill-icon">{{ statusIcon(clientStatus(c.id)) }}</span>{{ clientStatusLabel(c.id) }}
+              </span>
+            </div>
             <div class="record-sub">{{ c.phone }}<span v-if="c.age"> · {{ c.age }} лет</span><span v-if="c.contract_number"> · №{{ c.contract_number }}</span></div>
             <div class="record-sub">{{ clientActiveSummary(c.id) }}</div>
           </div>
@@ -72,19 +81,26 @@
 
     <!-- ===================== Журнал ===================== -->
     <div v-if="tab === 'attendance'" class="tab-panel wide">
-      <div class="attendance-controls">
-        <FormSelect
-          label="Группа"
-          placeholder="Выберите группу"
-          :model-value="attendanceGroupId"
-          :options="groupOptions"
-          @update:modelValue="onGroupChange"
-        />
-        <div v-if="attendanceGroupId" class="month-nav">
+      <div class="section-buttons-row">
+        <button
+          v-for="opt in groupOptions"
+          :key="opt.value"
+          type="button"
+          class="section-btn"
+          :class="{ active: attendanceGroupId === opt.value }"
+          @click="onGroupChange(opt.value)"
+        >{{ opt.label }}</button>
+      </div>
+      <div v-if="attendanceGroupId" class="attendance-controls">
+        <div class="month-nav">
           <button class="nav-arrow" type="button" @click="prevMonth">‹</button>
           <div class="month-label">{{ monthLabel }}</div>
           <button class="nav-arrow" type="button" @click="nextMonth">›</button>
         </div>
+        <button v-if="attendanceRows.length" class="excel-btn" type="button" @click="exportAttendanceExcel">
+          <i class="excel-btn-icon">⬇</i>
+          <span>Excel</span>
+        </button>
       </div>
       <template v-if="attendanceGroupId">
         <div v-if="attendanceRows.length" class="attendance-table-wrap">
@@ -102,7 +118,15 @@
             </thead>
             <tbody>
               <tr v-for="row in attendanceRows" :key="row.client_id">
-                <td class="att-name-col">{{ row.full_name }}</td>
+                <td class="att-name-col att-name-clickable" @click="onJournalClientClick(row)">
+                  <div class="att-name">{{ row.full_name }}</div>
+                  <div v-if="journalMembershipStatus(row)" class="att-membership-line">
+                    <span class="status-pill mini" :class="journalMembershipStatus(row).status">
+                      <span class="status-pill-icon">{{ statusIcon(journalMembershipStatus(row).status) }}</span>{{ journalPillText(journalMembershipStatus(row)) }}
+                    </span>
+                  </div>
+                  <div v-else class="att-membership-line att-membership-none">нет абонемента</div>
+                </td>
                 <td v-for="d in attendanceDays" :key="d.date" class="att-day-col">
                   <div
                     class="att-cell"
@@ -199,6 +223,11 @@
         <FormInput label="Абонемент по" type="date" :model-value="membershipForm.end_date" :disabled="!isOwner" @update:modelValue="membershipForm.end_date = $event" />
         <FormInput label="Сумма" type="number" suffix="тг." :model-value="membershipForm.price" @update:modelValue="membershipForm.price = $event" />
         <FormSelect label="Статус" :model-value="membershipForm.status" :options="membershipStatusOptions" @update:modelValue="membershipForm.status = $event" />
+        <label class="paid-checkbox-row">
+          <input type="checkbox" :checked="membershipForm.paid" @change="membershipForm.paid = $event.target.checked" />
+          <span>Абонемент оплачен</span>
+        </label>
+        <div v-if="!membershipForm.paid" class="debt-hint">Будет отображаться как «Долг» на карточке клиента, пока не отметите оплату.</div>
         <button v-if="editingMembershipId" class="pill-btn danger" type="button" @click="deleteMembership">Удалить абонемент</button>
       </template>
       <template #footer>
@@ -273,6 +302,30 @@ import { ruDayShort } from '@/utils/ruDate';
 
 const MEMBERSHIP_STATUS_LABELS = { active: 'Активен', expired: 'Закончился', frozen: 'Заморожен' };
 const ATTENDANCE_MARK_ICONS = { present: '✓', absent: '✕', trainer_cancelled: '⊘', makeup: '↻' };
+// Same status colors as the on-screen journal, translated to ARGB for the xlsx export.
+const ATTENDANCE_XLSX_COLORS = {
+  present: { fill: 'FFDCFCE7', font: 'FF166534' },
+  absent: { fill: 'FFFFE4E6', font: 'FFBE123C' },
+  trainer_cancelled: { fill: 'FFFEF3C7', font: 'FF92400E' },
+  makeup: { fill: 'FFDBEAFE', font: 'FF1D4ED8' },
+  frozen: { fill: 'FFE0F2FE', font: 'FF0369A1' },
+};
+const XLSX_THIN_BORDER = { style: 'thin', color: { argb: 'FFCBD5E1' } };
+const XLSX_CELL_BORDER = {
+  top: XLSX_THIN_BORDER,
+  left: XLSX_THIN_BORDER,
+  bottom: XLSX_THIN_BORDER,
+  right: XLSX_THIN_BORDER,
+};
+// Приоритет при нескольких одновременно верных условиях: долг важнее заморозки,
+// заморозка важнее скорого окончания.
+const CLIENT_STATUS_META = {
+  debt: { color: '#e11d48', icon: '⚠', label: 'Долг' },
+  frozen: { color: '#0ea5e9', icon: '❄', label: 'Заморожен' },
+  expiring: { color: '#f59e0b', icon: '⏳', label: 'Скоро закончится' },
+  active: { color: '#059669', icon: '✓', label: 'Активен' },
+  inactive: { color: '#94a3b8', icon: '○', label: 'Неактивен' },
+};
 const TRIAL_STATUS_LABELS = {
   scheduled: 'Записан',
   came: 'Пришёл',
@@ -427,6 +480,7 @@ export default {
       this.loadSchedules(),
     ]);
     this.warnExpiringMemberships();
+    this.warnDebtMemberships();
   },
   watch: {
     selectedGroupId(val) {
@@ -480,7 +534,7 @@ export default {
     },
     groupColor(resourceId) {
       const g = this.groups.find((item) => item.id === resourceId);
-      return g ? g.color : '#9aa0a6';
+      return g ? g.color : '#94a3b8';
     },
     membershipStatusLabel(status) {
       return MEMBERSHIP_STATUS_LABELS[status] || status;
@@ -520,6 +574,21 @@ export default {
         : `У ${soon.length} клиентов: ${entries.join(', ')}`;
       showToast(message);
     },
+    // Same idea as warnExpiringMemberships, but for unpaid ("Долг") memberships —
+    // active or frozen, doesn't matter, only whether it's actually been paid for.
+    warnDebtMemberships() {
+      const debts = this.memberships.filter((m) => m.paid === false && this.effectiveStatus(m) !== 'expired');
+      if (!debts.length) return;
+      const entries = debts.map((m) => {
+        const client = this.clients.find((c) => c.id === m.client_id);
+        const name = client ? client.full_name : '—';
+        return `${name} (${this.groupLabels(m.resource_ids)})`;
+      });
+      const message = debts.length === 1
+        ? `Долг по абонементу клиента ${entries[0]}`
+        : `Долг по абонементам у ${debts.length} клиентов: ${entries.join(', ')}`;
+      showToast(message, { color: 'danger' });
+    },
     trialStatusLabel(status) {
       return TRIAL_STATUS_LABELS[status] || status;
     },
@@ -542,10 +611,64 @@ export default {
       if (!active.length) return 'Нет активного абонемента';
       return active.map((m) => this.groupLabels(m.resource_ids)).join(', ');
     },
-    clientBarColor(clientId) {
-      let active = this.clientMemberships(clientId).filter((m) => this.effectiveStatus(m) === 'active');
-      if (this.selectedGroupId) active = active.filter((m) => m.resource_ids.includes(this.selectedGroupId));
-      return active.length ? this.groupColor(active[0].resource_ids[0]) : '#9aa0a6';
+    // Карточка клиента красится по самому "тревожному" из его абонементов:
+    // долг > заморозка > истекает через <=3 дня > активен > нет действующего.
+    clientStatus(clientId) {
+      let current = this.clientMemberships(clientId).filter((m) => this.effectiveStatus(m) !== 'expired');
+      if (this.selectedGroupId) current = current.filter((m) => m.resource_ids.includes(this.selectedGroupId));
+      if (!current.length) return 'inactive';
+      if (current.some((m) => m.paid === false)) return 'debt';
+      if (current.some((m) => this.effectiveStatus(m) === 'frozen')) return 'frozen';
+      const daysLeft = current
+        .filter((m) => this.effectiveStatus(m) === 'active')
+        .map((m) => moment(m.end_date).startOf('day').diff(moment().startOf('day'), 'days'));
+      if (daysLeft.length && Math.min(...daysLeft) <= 3) return 'expiring';
+      return 'active';
+    },
+    statusColor(status) {
+      return CLIENT_STATUS_META[status].color;
+    },
+    statusLabel(status) {
+      return CLIENT_STATUS_META[status].label;
+    },
+    statusIcon(status) {
+      return CLIENT_STATUS_META[status].icon;
+    },
+    // В журнале пилюля совмещает иконку с датой ("до 15.10.2026") для
+    // активных/скоро истекающих — для долга/заморозки просто показывает статус.
+    journalPillText(info) {
+      if (info.status === 'active' || info.status === 'expiring') {
+        return `до ${this.formatDate(info.membership.end_date)}`;
+      }
+      return this.statusLabel(info.status);
+    },
+    clientStatusColor(clientId) {
+      return this.statusColor(this.clientStatus(clientId));
+    },
+    clientStatusLabel(clientId) {
+      return this.statusLabel(this.clientStatus(clientId));
+    },
+    // Тот же приоритет, что и у clientStatus, но по абонементам самой строки
+    // журнала (уже отфильтрованным на текущую группу), а не по всем абонементам
+    // клиента — чтобы дата "до" относилась именно к этой секции.
+    journalMembershipStatus(row) {
+      const current = row.memberships.filter((m) => this.effectiveStatus(m) !== 'expired');
+      if (!current.length) return null;
+      const debt = current.find((m) => m.paid === false);
+      const frozen = current.find((m) => this.effectiveStatus(m) === 'frozen');
+      const active = current
+        .filter((m) => this.effectiveStatus(m) === 'active')
+        .sort((a, b) => moment(a.end_date).diff(moment(b.end_date)));
+      const membership = debt || frozen || active[0];
+      if (!membership) return null;
+      let status;
+      if (membership.paid === false) status = 'debt';
+      else if (this.effectiveStatus(membership) === 'frozen') status = 'frozen';
+      else {
+        const daysLeft = moment(membership.end_date).startOf('day').diff(moment().startOf('day'), 'days');
+        status = daysLeft <= 3 ? 'expiring' : 'active';
+      }
+      return { membership, status };
     },
     openAddClient() {
       this.editingClientId = null;
@@ -565,6 +688,10 @@ export default {
         return Number.isFinite(n) && n > max ? n : max;
       }, 0);
       return maxNumber + 1;
+    },
+    onJournalClientClick(row) {
+      const client = this.clients.find((c) => c.id === row.client_id);
+      if (client) this.onClientClick(client);
     },
     onClientClick(c) {
       if (!this.canWrite) return;
@@ -622,6 +749,7 @@ export default {
         end_date: this.autoEndDate(startDate),
         price: null,
         status: 'active',
+        paid: true,
       };
       this.showMembershipModal = true;
     },
@@ -646,6 +774,7 @@ export default {
         end_date: moment(m.end_date).format('YYYY-MM-DD'),
         price: m.price,
         status: m.status,
+        paid: m.paid,
       };
       this.showMembershipModal = true;
     },
@@ -706,6 +835,66 @@ export default {
       );
       this.attendanceMemberships = result.memberships;
       this.attendanceMarks = result.attendance;
+    },
+    // Built from the same data the table renders (not the DOM) so the
+    // export doesn't depend on component markup/CSS staying in sync.
+    // ExcelJS (not the free SheetJS build) because SheetJS's community
+    // edition silently drops cell styles when writing .xlsx — no borders,
+    // no fills — which is exactly what this needs to not look like a CSV dump.
+    async exportAttendanceExcel() {
+      // Dynamic import — ExcelJS is a large dependency that only the club
+      // template's Excel export needs; a static import would bundle it into
+      // every business type's shared chunk instead of loading on demand.
+      const { default: ExcelJS } = await import('exceljs');
+      const group = this.groups.find((g) => g.id === this.attendanceGroupId);
+      const groupName = group ? group.label : 'Группа';
+      const columnCount = this.attendanceDays.length + 1;
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Табель', { views: [{ showGridLines: true }] });
+      sheet.columns = [{ width: 40 }, ...this.attendanceDays.map(() => ({ width: 8 }))];
+
+      const titleRow = sheet.addRow([`Табель: ${groupName} (${this.monthLabel})`]);
+      sheet.mergeCells(1, 1, 1, columnCount);
+      titleRow.height = 24;
+      titleRow.getCell(1).font = { bold: true, size: 13, color: { argb: 'FF1E293B' } };
+      titleRow.getCell(1).alignment = { vertical: 'middle' };
+
+      const headerRow = sheet.addRow(['Клиент', ...this.attendanceDays.map((d) => `${d.num} ${d.name}`)]);
+      headerRow.eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: 'FF1E293B' } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+        cell.border = XLSX_CELL_BORDER;
+      });
+      headerRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+      this.attendanceRows.forEach((row) => {
+        const values = [row.full_name, ...this.attendanceDays.map((d) => this.attendanceCellMark(row, d.date) || '')];
+        const xlsxRow = sheet.addRow(values);
+        xlsxRow.getCell(1).border = XLSX_CELL_BORDER;
+        this.attendanceDays.forEach((d, i) => {
+          const cell = xlsxRow.getCell(i + 2);
+          cell.border = XLSX_CELL_BORDER;
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          const colors = ATTENDANCE_XLSX_COLORS[this.attendanceCellClass(row, d.date)];
+          if (colors) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.fill } };
+            cell.font = { bold: true, color: { argb: colors.font } };
+          }
+        });
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Табель_${groupName}_${this.attendanceMonth}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     },
     attendanceMarkFor(membershipId, dateStr) {
       return this.attendanceMarks.find((a) => a.membership_id === membershipId && moment(a.date).format('YYYY-MM-DD') === dateStr);
@@ -899,7 +1088,7 @@ export default {
   overflow-y: auto;
   padding: 24px 28px;
   box-sizing: border-box;
-  background: #f4f5f7;
+  background: #f8fafc;
 }
 
 .page-header {
@@ -910,18 +1099,6 @@ export default {
   flex-wrap: wrap;
 }
 
-.header-group-filter {
-  align-self: center;
-  min-width: 220px;
-  margin-bottom: 0;
-}
-
-.header-group-filter :deep(.ff-trigger) {
-  padding: 10px 14px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
 .page-header > .primary-btn {
   align-self: center;
   margin-left: auto;
@@ -930,7 +1107,7 @@ export default {
 .page-title {
   font-size: 1.4rem;
   font-weight: 800;
-  color: #1c1c1e;
+  color: #1e293b;
   margin: 0;
 }
 
@@ -940,7 +1117,7 @@ export default {
   gap: 4px;
   border: none;
   background: transparent;
-  color: #9aa0a6;
+  color: #94a3b8;
   font-weight: 700;
   font-size: 0.8rem;
   letter-spacing: 0.03em;
@@ -954,7 +1131,7 @@ export default {
 
 .primary-btn {
   border: none;
-  background: #2196f3;
+  background: #4f46e5;
   color: #fff;
   font-weight: 700;
   font-size: 0.8rem;
@@ -963,6 +1140,35 @@ export default {
   padding: 12px 20px;
   border-radius: 12px;
   cursor: pointer;
+}
+
+.section-buttons-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.section-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 12px;
+  padding: 9px 16px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.section-btn:hover {
+  background: #e2e8f0;
+}
+
+.section-btn.active {
+  background: #4f46e5;
+  color: #ffffff;
 }
 
 .tabs-row {
@@ -979,15 +1185,15 @@ export default {
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: #9aa0a6;
+  color: #94a3b8;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
 }
 
 .tab-btn.active {
-  color: #2196f3;
-  border-bottom-color: #2196f3;
+  color: #4f46e5;
+  border-bottom-color: #4f46e5;
 }
 
 .tab-panel.wide {
@@ -997,12 +1203,12 @@ export default {
 .date-pill {
   display: inline-block;
   border: none;
-  background: #eef0f0;
+  background: #f1f5f9;
   border-radius: 18px;
   padding: 8px 18px;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #2b2f33;
+  color: #1e293b;
   cursor: pointer;
   margin-bottom: 16px;
 }
@@ -1020,7 +1226,7 @@ export default {
 }
 
 .date-pill.active {
-  background: #2196f3;
+  background: #4f46e5;
   color: #fff;
 }
 
@@ -1031,17 +1237,17 @@ export default {
 .pill-toggle-btn {
   display: inline-block;
   border: none;
-  background: #eef0f0;
+  background: #f1f5f9;
   border-radius: 18px;
   padding: 8px 18px;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #2b2f33;
+  color: #1e293b;
   cursor: pointer;
 }
 
 .pill-toggle-btn.active {
-  background: #2196f3;
+  background: #4f46e5;
   color: #fff;
 }
 
@@ -1076,7 +1282,7 @@ export default {
 .record-bar {
   width: 3px;
   border-radius: 2px;
-  background: #2196f3;
+  background: #4f46e5;
   flex-shrink: 0;
 }
 
@@ -1086,7 +1292,7 @@ export default {
   border-radius: 50%;
   background-size: cover;
   background-position: center;
-  background-color: #eef0f0;
+  background-color: #f1f5f9;
   flex-shrink: 0;
 }
 
@@ -1103,7 +1309,7 @@ export default {
   height: 64px;
   border-radius: 50%;
   object-fit: cover;
-  background: #eef0f0;
+  background: #f1f5f9;
   flex-shrink: 0;
 }
 
@@ -1115,19 +1321,19 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #9aa0a6;
+  color: #94a3b8;
   font-size: 0.75rem;
   font-weight: 600;
 }
 
 .trainer-photo-btn {
   position: relative;
-  background: #eef0f0;
+  background: #f1f5f9;
   border-radius: 12px;
   padding: 10px 16px;
   font-weight: 700;
   font-size: 0.85rem;
-  color: #1c1c1e;
+  color: #1e293b;
   cursor: pointer;
 }
 
@@ -1139,14 +1345,71 @@ export default {
 }
 
 .record-title {
+  min-width: 0;
   font-weight: 700;
   font-size: 1.02rem;
-  color: #1c1c1e;
+  color: #1e293b;
+}
+
+.record-title-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 8px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.status-pill-icon {
+  font-size: 0.85em;
+  line-height: 1;
+}
+
+.status-pill.active {
+  background: rgba(5, 150, 105, 0.08);
+  color: #059669;
+  border-color: rgba(5, 150, 105, 0.35);
+}
+
+.status-pill.expiring {
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.status-pill.debt {
+  background: rgba(225, 29, 72, 0.08);
+  color: #e11d48;
+  border-color: rgba(225, 29, 72, 0.35);
+}
+
+.status-pill.frozen {
+  background: rgba(14, 165, 233, 0.08);
+  color: #0284c7;
+  border-color: rgba(14, 165, 233, 0.35);
+}
+
+.status-pill.inactive {
+  background: rgba(100, 116, 139, 0.08);
+  color: #64748b;
+  border-color: rgba(100, 116, 139, 0.3);
 }
 
 .record-sub {
   font-size: 0.85rem;
-  color: #6a6f75;
+  color: #64748b;
   margin-top: 2px;
 }
 
@@ -1157,59 +1420,78 @@ export default {
   border-radius: 10px;
   font-size: 0.75rem;
   font-weight: 700;
-  background: rgba(76, 175, 80, 0.14);
-  color: #2e7d32;
+  background: rgba(5, 150, 105, 0.12);
+  color: #059669;
 }
 
 .status-badge.expired,
 .status-badge.no_show,
 .status-badge.declined {
-  background: rgba(244, 67, 54, 0.12);
-  color: #d32f2f;
+  background: rgba(225, 29, 72, 0.12);
+  color: #e11d48;
 }
 
 .status-badge.frozen,
 .status-badge.thinking {
-  background: rgba(255, 152, 0, 0.14);
-  color: #e65100;
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
 }
 
 .status-badge.scheduled {
-  background: rgba(33, 150, 243, 0.12);
-  color: #1565c0;
+  background: rgba(79, 70, 229, 0.12);
+  color: #4338ca;
 }
 
 .empty-state {
   grid-column: 1 / -1;
   text-align: center;
-  color: #9aa0a6;
+  color: #94a3b8;
   padding: 40px 0;
 }
 
 .attendance-controls {
   display: flex;
   align-items: center;
-  gap: 24px;
-  max-width: 520px;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 16px;
 }
 
-.attendance-controls > :first-child {
-  flex: 1;
+.excel-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: #059669;
+  color: #ffffff;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.excel-btn:hover {
+  background: #047857;
+}
+
+.excel-btn-icon {
+  font-style: normal;
+  font-weight: 900;
 }
 
 .month-nav {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #eef0f0;
+  background: #f1f5f9;
   border-radius: 14px;
   padding: 8px 14px;
 }
 
 .month-label {
   font-weight: 700;
-  color: #1c1c1e;
+  color: #1e293b;
   width: 190px;
   text-align: center;
   white-space: nowrap;
@@ -1218,7 +1500,7 @@ export default {
 .nav-arrow {
   border: none;
   background: transparent;
-  color: #6a6f75;
+  color: #64748b;
   font-size: 20px;
   line-height: 1;
   padding: 2px 6px;
@@ -1246,7 +1528,7 @@ export default {
 }
 
 .attendance-table tbody tr + tr td {
-  border-top: 1px solid #f0f1f3;
+  border-top: 1px solid #f1f5f9;
 }
 
 .att-name-col {
@@ -1254,17 +1536,45 @@ export default {
   left: 0;
   width: 25%;
   background: #ffffff;
-  text-align: left;
+  text-align: center;
   font-weight: 700;
-  color: #2196f3;
+  color: #4f46e5;
   white-space: normal;
   word-break: break-word;
-  padding-left: 16px;
+  padding: 8px 16px;
   z-index: 1;
 }
 
 .attendance-table thead .att-name-col {
-  color: #1c1c1e;
+  color: #1e293b;
+}
+
+.att-name {
+  margin-bottom: 3px;
+}
+
+.att-membership-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-weight: 600;
+}
+
+.att-membership-none {
+  color: #94a3b8;
+  font-size: 0.72rem;
+}
+
+.status-pill.mini {
+  padding: 1px 8px;
+  font-size: 0.68rem;
+}
+
+.att-name-clickable {
+  cursor: pointer;
+  color: #4f46e5;
 }
 
 .attendance-day-label {
@@ -1272,22 +1582,22 @@ export default {
   flex-direction: column;
   align-items: center;
   font-size: 0.72rem;
-  color: #9aa0a6;
+  color: #94a3b8;
   font-weight: 600;
 }
 
 .attendance-day-num {
-  color: #1c1c1e;
+  color: #1e293b;
 }
 
 .att-cell {
   cursor: pointer;
-  color: #9aa0a6;
+  color: #94a3b8;
   width: 36px;
   height: 36px;
   margin: 0 auto;
   border-radius: 10px;
-  background: #eef0f0;
+  background: #f1f5f9;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1295,13 +1605,13 @@ export default {
 }
 
 .att-cell.present {
-  background: rgba(76, 175, 80, 0.16);
-  color: #2e7d32;
+  background: rgba(5, 150, 105, 0.14);
+  color: #059669;
 }
 
 .att-cell.absent {
-  background: rgba(244, 67, 54, 0.12);
-  color: #d32f2f;
+  background: rgba(225, 29, 72, 0.12);
+  color: #e11d48;
 }
 
 .att-cell.out-of-range {
@@ -1310,18 +1620,18 @@ export default {
 }
 
 .att-cell.trainer_cancelled {
-  background: rgba(255, 152, 0, 0.16);
-  color: #e65100;
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
 }
 
 .att-cell.makeup {
-  background: rgba(33, 150, 243, 0.16);
-  color: #1565c0;
+  background: rgba(79, 70, 229, 0.14);
+  color: #4338ca;
 }
 
 .att-cell.frozen {
-  background: rgba(96, 125, 139, 0.18);
-  color: #455a64;
+  background: rgba(14, 165, 233, 0.16);
+  color: #0369a1;
   cursor: default;
 }
 
@@ -1335,23 +1645,23 @@ export default {
 }
 
 .legend-item.present {
-  color: #2e7d32;
+  color: #059669;
 }
 
 .legend-item.absent {
-  color: #d32f2f;
+  color: #e11d48;
 }
 
 .legend-item.trainer_cancelled {
-  color: #e65100;
+  color: #b45309;
 }
 
 .legend-item.makeup {
-  color: #1565c0;
+  color: #4338ca;
 }
 
 .legend-item.frozen {
-  color: #455a64;
+  color: #0369a1;
 }
 
 .attendance-mode-row {
@@ -1365,22 +1675,22 @@ export default {
 .attendance-mode-label {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #6a6f75;
+  color: #64748b;
 }
 
 .mode-btn {
   border: none;
-  background: #eef0f0;
+  background: #f1f5f9;
   border-radius: 10px;
   padding: 6px 12px;
   font-size: 0.8rem;
   font-weight: 700;
-  color: #1c1c1e;
+  color: #1e293b;
   cursor: pointer;
 }
 
 .mode-btn.active {
-  background: #1c1c1e;
+  background: #1e293b;
   color: #ffffff;
 }
 
@@ -1394,30 +1704,52 @@ export default {
 }
 
 .pill-btn.ghost {
-  background: #f4f5f7;
+  background: #f8fafc;
   color: #4a4f55;
 }
 
+.paid-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #1e293b;
+}
+
+.paid-checkbox-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: #4f46e5;
+}
+
+.debt-hint {
+  font-size: 0.78rem;
+  color: #e11d48;
+  margin-bottom: 12px;
+}
+
 .pill-btn.primary {
-  background: #2196f3;
+  background: #4f46e5;
   color: #fff;
 }
 
 .pill-btn.danger {
-  background: rgba(244, 67, 54, 0.12);
-  color: #d32f2f;
+  background: rgba(225, 29, 72, 0.12);
+  color: #e11d48;
   margin-right: auto;
 }
 
 .pill-btn.success {
-  background: rgba(76, 175, 80, 0.14);
-  color: #2e7d32;
+  background: rgba(5, 150, 105, 0.12);
+  color: #059669;
 }
 
 .section-title {
   font-weight: 700;
   font-size: 0.95rem;
-  color: #1c1c1e;
+  color: #1e293b;
   margin: 18px 0 10px;
 }
 

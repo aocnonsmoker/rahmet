@@ -47,6 +47,11 @@ const routes = [
         meta: { ownerOnly: true },
       },
       {
+        path: 'audit-log',
+        component: () => import('@/views/AuditLogGate.vue'),
+        meta: { ownerOnly: true },
+      },
+      {
         // Any other tab, e.g. /tabs/spa, /tabs/karaoke — resolved at runtime
         // against the tenant's sections list (see SectionView.vue), which
         // also picks the mobile/desktop component by viewport width.

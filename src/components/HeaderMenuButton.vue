@@ -6,7 +6,7 @@
 
 <script>
 import { IonIcon, actionSheetController } from '@ionic/vue';
-import { cashOutline, settingsOutline, logOutOutline, ellipsisVertical } from 'ionicons/icons';
+import { cashOutline, settingsOutline, logOutOutline, ellipsisVertical, listOutline } from 'ionicons/icons';
 import { useAuthStore } from '@/stores/auth';
 import { showConfirm } from '@/services/dialogs';
 
@@ -20,6 +20,7 @@ export default {
         settings: settingsOutline,
         logout: logOutOutline,
         menu: ellipsisVertical,
+        auditLog: listOutline,
       },
     };
   },
@@ -30,6 +31,7 @@ export default {
       if (auth.isOwner) {
         buttons.push({ text: 'Касса', icon: this.icons.cash, handler: () => this.$router.push('/tabs/cash') });
         buttons.push({ text: 'Настройки', icon: this.icons.settings, handler: () => this.$router.push('/tabs/settings') });
+        buttons.push({ text: 'Журнал событий', icon: this.icons.auditLog, handler: () => this.$router.push('/tabs/audit-log') });
       }
       buttons.push({ text: 'Выйти', icon: this.icons.logout, role: 'destructive', handler: () => this.logout() });
 
