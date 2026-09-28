@@ -120,6 +120,7 @@
               <tr v-for="row in attendanceRows" :key="row.client_id">
                 <td class="att-name-col att-name-clickable" @click="onJournalClientClick(row)">
                   <div class="att-name">{{ row.full_name }}</div>
+                  <div v-if="row.phone" class="att-phone">{{ row.phone }}</div>
                   <div v-if="journalMembershipStatus(row)" class="att-membership-line">
                     <span class="status-pill mini" :class="journalMembershipStatus(row).status">
                       <span class="status-pill-icon">{{ statusIcon(journalMembershipStatus(row).status) }}</span>{{ journalPillText(journalMembershipStatus(row)) }}
@@ -463,7 +464,7 @@ export default {
       const byClient = new Map();
       for (const m of this.attendanceMemberships) {
         if (!byClient.has(m.client_id)) {
-          byClient.set(m.client_id, { client_id: m.client_id, full_name: m.full_name, memberships: [] });
+          byClient.set(m.client_id, { client_id: m.client_id, full_name: m.full_name, phone: m.phone, memberships: [] });
         }
         byClient.get(m.client_id).memberships.push(m);
       }
@@ -1550,6 +1551,13 @@ export default {
 }
 
 .att-name {
+  margin-bottom: 3px;
+}
+
+.att-phone {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #64748b;
   margin-bottom: 3px;
 }
 
