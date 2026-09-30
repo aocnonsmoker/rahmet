@@ -54,6 +54,7 @@ import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
 import HeaderMenuButton from '@/components/HeaderMenuButton.vue';
 import { apiFetch } from '@/services/api';
+import { showAlert } from '@/services/dialogs';
 import { useSectionsStore } from '@/stores/sections';
 
 const ENTITY_LABELS = {
@@ -138,6 +139,11 @@ export default {
         this.logs = reset ? result : [...this.logs, ...result];
         this.hasMore = result.length === PAGE_SIZE;
         this.offset += result.length;
+      } catch (e) {
+        // Fails silently otherwise — an empty list looks identical to "no
+        // events yet", which is exactly what hid the nginx routing bug that
+        // broke this page in prod (2026-09-30).
+        await showAlert(e.message || 'Не удалось загрузить журнал событий');
       } finally {
         this.loading = false;
       }

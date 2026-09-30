@@ -152,6 +152,11 @@ export default {
       this.warningsLoading = true;
       try {
         this.warnings = await apiFetch('/membership_warnings');
+      } catch (e) {
+        // Runs on every page load — an alert here would be intrusive, but
+        // silently swallowing it is exactly what hid the nginx routing bug
+        // that broke this endpoint in prod (2026-09-30), so at least log it.
+        console.error('Failed to load membership warnings:', e);
       } finally {
         this.warningsLoading = false;
       }
