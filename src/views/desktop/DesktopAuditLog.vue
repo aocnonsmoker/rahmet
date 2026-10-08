@@ -2,6 +2,10 @@
   <ion-page class="page">
     <div class="page-header">
       <h1 class="page-title">Журнал событий</h1>
+      <button class="excel-btn" type="button" :disabled="exporting" @click="exportExcel">
+        <i class="excel-btn-icon">⬇</i>
+        <span>{{ exporting ? 'Выгрузка…' : 'Excel' }}</span>
+      </button>
       <button class="link-btn" type="button" @click="refresh">
         <ion-icon :icon="refreshIcon"></ion-icon>
         Обновить
@@ -55,28 +59,9 @@ import { refreshOutline } from 'ionicons/icons';
 import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
 import { apiFetch } from '@/services/api';
+import { AUDIT_ACTION_LABELS as ACTION_LABELS, AUDIT_ENTITY_LABELS as ENTITY_LABELS, exportAuditLogXlsx } from '@/services/auditLogExport';
 import { showAlert } from '@/services/dialogs';
 import { useSectionsStore } from '@/stores/sections';
-
-const ENTITY_LABELS = {
-  trainers: 'Тренеры',
-  resources: 'Группы/ресурсы',
-  group_schedules: 'Расписание групп',
-  sections: 'Разделы',
-  records: 'Записи',
-  clients: 'Клиенты',
-  memberships: 'Абонементы',
-  attendance: 'Посещаемость',
-  trial_lessons: 'Пробные занятия',
-  users: 'Сотрудники',
-};
-
-const ACTION_LABELS = {
-  create: 'Добавление',
-  update: 'Изменение',
-  delete: 'Удаление',
-  renew: 'Продление',
-};
 
 const PAGE_SIZE = 50;
 
@@ -88,6 +73,7 @@ export default {
       refreshIcon: refreshOutline,
       logs: [],
       loading: false,
+      exporting: false,
       hasMore: true,
       offset: 0,
       filterSection: null,
@@ -130,12 +116,7 @@ export default {
       }
       this.loading = true;
       try {
-        const params = new URLSearchParams({ limit: PAGE_SIZE, offset: this.offset });
-        if (this.filterSection) params.set('section', this.filterSection);
-        if (this.filterAction) params.set('action', this.filterAction);
-        if (this.filterEntityType) params.set('entity_type', this.filterEntityType);
-        if (this.dateFrom) params.set('start_date', this.dateFrom);
-        if (this.dateTo) params.set('end_date', this.dateTo);
+        const params = new URLSearchParams({ ...this.filterParams(), limit: PAGE_SIZE, offset: this.offset });
         const result = await apiFetch(`/audit_logs?${params}`);
         this.logs = reset ? result : [...this.logs, ...result];
         this.hasMore = result.length === PAGE_SIZE;
@@ -147,6 +128,26 @@ export default {
         await showAlert(e.message || 'Не удалось загрузить журнал событий');
       } finally {
         this.loading = false;
+      }
+    },
+    filterParams() {
+      const params = {};
+      if (this.filterSection) params.section = this.filterSection;
+      if (this.filterAction) params.action = this.filterAction;
+      if (this.filterEntityType) params.entity_type = this.filterEntityType;
+      if (this.dateFrom) params.start_date = this.dateFrom;
+      if (this.dateTo) params.end_date = this.dateTo;
+      return params;
+    },
+    async exportExcel() {
+      this.exporting = true;
+      try {
+        const count = await exportAuditLogXlsx(this.filterParams());
+        if (!count) await showAlert('Нет событий для выгрузки по выбранным фильтрам');
+      } catch (e) {
+        await showAlert(e.message || 'Не удалось выгрузить журнал событий');
+      } finally {
+        this.exporting = false;
       }
     },
     async loadMore() {
@@ -215,6 +216,34 @@ export default {
   font-weight: 700;
   color: #4a4f55;
   cursor: pointer;
+}
+
+.excel-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: #059669;
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.excel-btn:hover {
+  background: #047857;
+}
+
+.excel-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.excel-btn-icon {
+  font-style: normal;
+  font-weight: 900;
 }
 
 .tab-panel {

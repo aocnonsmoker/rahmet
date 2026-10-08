@@ -22,6 +22,10 @@
           <FormInput label="С" type="date" :model-value="dateFrom" @update:modelValue="onDateFrom" />
           <FormInput label="По" type="date" :model-value="dateTo" @update:modelValue="onDateTo" />
         </div>
+        <button class="excel-btn" type="button" :disabled="exporting" @click="exportExcel">
+          <i class="excel-btn-icon">⬇</i>
+          <span>{{ exporting ? 'Выгрузка…' : 'Выгрузить в Excel' }}</span>
+        </button>
 
         <div class="log-list">
           <div v-for="log in logs" :key="log.id" class="log-row">
@@ -54,28 +58,9 @@ import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
 import HeaderMenuButton from '@/components/HeaderMenuButton.vue';
 import { apiFetch } from '@/services/api';
+import { AUDIT_ACTION_LABELS as ACTION_LABELS, AUDIT_ENTITY_LABELS as ENTITY_LABELS, exportAuditLogXlsx } from '@/services/auditLogExport';
 import { showAlert } from '@/services/dialogs';
 import { useSectionsStore } from '@/stores/sections';
-
-const ENTITY_LABELS = {
-  trainers: 'Тренеры',
-  resources: 'Группы/ресурсы',
-  group_schedules: 'Расписание групп',
-  sections: 'Разделы',
-  records: 'Записи',
-  clients: 'Клиенты',
-  memberships: 'Абонементы',
-  attendance: 'Посещаемость',
-  trial_lessons: 'Пробные занятия',
-  users: 'Сотрудники',
-};
-
-const ACTION_LABELS = {
-  create: 'Добавление',
-  update: 'Изменение',
-  delete: 'Удаление',
-  renew: 'Продление',
-};
 
 const PAGE_SIZE = 50;
 
@@ -87,6 +72,7 @@ export default {
       refreshIcon: refreshOutline,
       logs: [],
       loading: false,
+      exporting: false,
       hasMore: true,
       offset: 0,
       filterSection: null,
@@ -129,12 +115,7 @@ export default {
       }
       this.loading = true;
       try {
-        const params = new URLSearchParams({ limit: PAGE_SIZE, offset: this.offset });
-        if (this.filterSection) params.set('section', this.filterSection);
-        if (this.filterAction) params.set('action', this.filterAction);
-        if (this.filterEntityType) params.set('entity_type', this.filterEntityType);
-        if (this.dateFrom) params.set('start_date', this.dateFrom);
-        if (this.dateTo) params.set('end_date', this.dateTo);
+        const params = new URLSearchParams({ ...this.filterParams(), limit: PAGE_SIZE, offset: this.offset });
         const result = await apiFetch(`/audit_logs?${params}`);
         this.logs = reset ? result : [...this.logs, ...result];
         this.hasMore = result.length === PAGE_SIZE;
@@ -146,6 +127,26 @@ export default {
         await showAlert(e.message || 'Не удалось загрузить журнал событий');
       } finally {
         this.loading = false;
+      }
+    },
+    filterParams() {
+      const params = {};
+      if (this.filterSection) params.section = this.filterSection;
+      if (this.filterAction) params.action = this.filterAction;
+      if (this.filterEntityType) params.entity_type = this.filterEntityType;
+      if (this.dateFrom) params.start_date = this.dateFrom;
+      if (this.dateTo) params.end_date = this.dateTo;
+      return params;
+    },
+    async exportExcel() {
+      this.exporting = true;
+      try {
+        const count = await exportAuditLogXlsx(this.filterParams());
+        if (!count) await showAlert('Нет событий для выгрузки по выбранным фильтрам');
+      } catch (e) {
+        await showAlert(e.message || 'Не удалось выгрузить журнал событий');
+      } finally {
+        this.exporting = false;
       }
     },
     async loadMore() {
@@ -219,6 +220,31 @@ export default {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 12px;
+}
+
+.excel-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  background: #059669;
+  color: #ffffff;
+  border-radius: 12px;
+  padding: 12px 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.excel-btn:disabled {
+  opacity: 0.6;
+}
+
+.excel-btn-icon {
+  font-style: normal;
+  font-weight: 900;
 }
 
 .log-list {

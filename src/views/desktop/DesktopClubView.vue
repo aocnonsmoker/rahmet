@@ -44,6 +44,7 @@
             </div>
             <div class="record-sub">{{ c.phone }}<span v-if="c.age"> · {{ c.age }} лет</span><span v-if="c.contract_number"> · №{{ c.contract_number }}</span></div>
             <div class="record-sub">{{ clientActiveSummary(c.id) }}</div>
+            <div v-if="c.note" class="client-note">📝 {{ c.note }}</div>
           </div>
         </div>
         <div v-if="!visibleClients.length" class="empty-state">{{ selectedGroupId ? 'Нет клиентов в этой секции' : 'Нет клиентов' }}</div>
@@ -189,6 +190,7 @@
         <FormInput label="Телефон" type="tel" :model-value="clientForm.phone" @update:modelValue="clientForm.phone = $event" />
         <FormInput label="Возраст" type="number" :model-value="clientForm.age" @update:modelValue="clientForm.age = $event" />
         <FormInput label="ФИО родителя/опекуна" type="text" :model-value="clientForm.parent_name" @update:modelValue="clientForm.parent_name = $event" />
+        <FormInput label="Примечание" type="textarea" :model-value="clientForm.note" @update:modelValue="clientForm.note = $event" />
 
         <template v-if="editingClientId">
           <FormInput label="Номер договора" type="text" :model-value="clientForm.contract_number" @update:modelValue="clientForm.contract_number = $event" />
@@ -218,6 +220,7 @@
     <!-- Модальное окно абонемента -->
     <DesktopModal v-model="showMembershipModal" :title="editingMembershipId ? 'Абонемент' : 'Новый абонемент'">
       <template v-if="membershipForm">
+        <div v-if="membershipClientNote" class="client-note client-note-banner">📝 {{ membershipClientNote }}</div>
         <FormSelect label="Группа" placeholder="Выберите группу" :model-value="membershipForm.resource_ids[0] || null" :options="groupOptions" @update:modelValue="membershipForm.resource_ids = $event ? [$event] : []" />
         <FormInput label="Дата оплаты" type="date" :model-value="membershipForm.payment_date" @update:modelValue="membershipForm.payment_date = $event" />
         <FormInput label="Абонемент с" type="date" :model-value="membershipForm.start_date" @update:modelValue="onMembershipStartDateChange" />
@@ -392,6 +395,12 @@ export default {
     },
     isOwner() {
       return useAuthStore().isOwner;
+    },
+    // Shown right where the price is entered, so a family discount noted on
+    // the client card isn't missed when selling/renewing a membership.
+    membershipClientNote() {
+      const client = this.clients.find((c) => c.id === this.membershipClientId);
+      return client ? client.note : null;
     },
     groupOptions() {
       return this.groups.map((g) => ({ value: g.id, label: g.label, color: g.color }));
@@ -680,6 +689,7 @@ export default {
         parent_name: '',
         contract_number: String(this.nextContractNumber()),
         contract_date: moment().format('YYYY-MM-DD'),
+        note: '',
       };
       this.showClientModal = true;
     },
@@ -704,6 +714,7 @@ export default {
         parent_name: c.parent_name,
         contract_number: c.contract_number || '',
         contract_date: c.contract_date ? moment(c.contract_date).format('YYYY-MM-DD') : '',
+        note: c.note || '',
       };
       this.showClientModal = true;
     },
@@ -1412,6 +1423,24 @@ export default {
   font-size: 0.85rem;
   color: #64748b;
   margin-top: 2px;
+}
+
+.client-note {
+  margin-top: 6px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #92400e;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.client-note-banner {
+  margin: 0 0 14px;
+  font-size: 0.85rem;
 }
 
 .status-badge {

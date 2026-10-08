@@ -2,7 +2,17 @@
   <div class="ff">
     <label v-if="label" class="ff-label">{{ label }}</label>
     <div class="ff-box">
+      <textarea
+        v-if="type === 'textarea'"
+        class="ff-input ff-textarea"
+        rows="3"
+        :placeholder="placeholder"
+        :value="modelValue"
+        :disabled="disabled"
+        @input="$emit('update:modelValue', $event.target.value)"
+      ></textarea>
       <input
+        v-else
         class="ff-input"
         :class="{ 'has-stepper': type === 'number' }"
         :type="type"
@@ -111,6 +121,13 @@ export default {
 
 .ff-input[type="number"] {
   -moz-appearance: textfield;
+}
+
+.ff-textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.4;
+  font-weight: 500;
 }
 
 .ff-input:disabled {
