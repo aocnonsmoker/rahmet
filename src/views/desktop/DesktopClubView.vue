@@ -186,6 +186,7 @@
     <!-- Модальное окно клиента -->
     <DesktopModal v-model="showClientModal" :title="editingClientId ? 'Клиент' : 'Новый клиент'">
       <template v-if="clientForm">
+        <FormSelect v-if="!editingClientId && templateClientOptions.length" label="Заполнить по клиенту (та же семья)" placeholder="Не выбрано" :model-value="clientForm.template_client_id" :options="templateClientOptions" @update:modelValue="applyClientTemplate" />
         <FormInput label="ФИО" type="text" :model-value="clientForm.full_name" @update:modelValue="clientForm.full_name = $event" />
         <FormInput label="Телефон" type="tel" :model-value="clientForm.phone" @update:modelValue="clientForm.phone = $event" />
         <FormInput label="Возраст" type="number" :model-value="clientForm.age" @update:modelValue="clientForm.age = $event" />
@@ -208,6 +209,7 @@
             <div v-if="!clientMemberships(editingClientId).length" class="empty-state">Нет абонементов</div>
           </div>
           <button class="pill-btn success add-membership-btn" type="button" @click="openAddMembershipForClient">+ Добавить абонемент</button>
+          <button class="pill-btn family add-membership-btn" type="button" @click="openAddSibling">+ Ребёнок из этой семьи</button>
         </template>
       </template>
       <template #footer>
@@ -401,6 +403,12 @@ export default {
     membershipClientNote() {
       const client = this.clients.find((c) => c.id === this.membershipClientId);
       return client ? client.note : null;
+    },
+    // Siblings share a parent and phone — pick an existing client to prefill them.
+    templateClientOptions() {
+      return this.clients
+        .filter((c) => c.parent_name || c.phone)
+        .map((c) => ({ value: c.id, label: [c.full_name, [c.parent_name, c.phone].filter(Boolean).join(' · ')].join(' — ') }));
     },
     groupOptions() {
       return this.groups.map((g) => ({ value: g.id, label: g.label, color: g.color }));
@@ -690,8 +698,24 @@ export default {
         contract_number: String(this.nextContractNumber()),
         contract_date: moment().format('YYYY-MM-DD'),
         note: '',
+        template_client_id: null,
       };
       this.showClientModal = true;
+    },
+    // Copies the name and family contact details from an existing client, so a
+    // sibling only needs the first name edited.
+    applyClientTemplate(clientId) {
+      this.clientForm.template_client_id = clientId;
+      const source = this.clients.find((c) => c.id === clientId);
+      if (!source) return;
+      this.clientForm.full_name = source.full_name || '';
+      this.clientForm.phone = source.phone || '+7';
+      this.clientForm.parent_name = source.parent_name || '';
+    },
+    openAddSibling() {
+      const sourceId = this.editingClientId;
+      this.openAddClient();
+      this.applyClientTemplate(sourceId);
     },
     nextContractNumber() {
       const maxNumber = this.clients.reduce((max, c) => {
@@ -724,6 +748,7 @@ export default {
         return;
       }
       const body = { ...this.clientForm };
+      delete body.template_client_id;
       try {
         if (this.editingClientId) {
           await apiFetch(`/clients/${this.editingClientId}?section=${this.sectionKey}`, { method: 'PUT', body });
@@ -1807,6 +1832,12 @@ export default {
 
 .add-membership-btn {
   width: 100%;
+}
+
+.pill-btn.family {
+  background: rgba(79, 70, 229, 0.1);
+  color: #4f46e5;
+  margin-top: 8px;
 }
 
 </style>
