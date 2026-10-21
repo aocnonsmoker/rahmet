@@ -130,7 +130,8 @@ export default {
       }
     },
     filterParams() {
-      const params = {};
+      // Local calendar days for the date filters (server stores UTC).
+      const params = { utc_offset_minutes: moment().utcOffset() };
       if (this.filterSection) params.section = this.filterSection;
       if (this.filterAction) params.action = this.filterAction;
       if (this.filterEntityType) params.entity_type = this.filterEntityType;

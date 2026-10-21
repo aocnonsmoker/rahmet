@@ -17,9 +17,9 @@
         :class="{ 'has-stepper': type === 'number' }"
         :type="type"
         :placeholder="placeholder"
-        :value="modelValue"
+        :value="type === 'tel' ? formatPhone(modelValue) : modelValue"
         :disabled="disabled"
-        @input="$emit('update:modelValue', $event.target.value)"
+        @input="onInput"
       />
       <span v-if="suffix" class="ff-suffix" :class="{ 'with-stepper': type === 'number' }">{{ suffix }}</span>
       <div v-if="type === 'number'" class="ff-stepper">
@@ -31,6 +31,10 @@
 </template>
 
 <script>
+import { formatPhone } from "@/services/phone";
+
+const countDigits = (s) => s.replace(/\D/g, "").length;
+
 export default {
   name: "FormInput",
   props: {
@@ -65,6 +69,33 @@ export default {
   },
   emits: ["update:modelValue"],
   methods: {
+    formatPhone,
+    onInput(event) {
+      if (this.type !== "tel") {
+        this.$emit("update:modelValue", event.target.value);
+        return;
+      }
+      // Reformat as "+7 701 890 22 33" while typing, keeping the caret after
+      // the same digit it was after (otherwise it jumps to the end).
+      const el = event.target;
+      let value = el.value;
+      let caretDigits = countDigits(value.slice(0, el.selectionStart));
+      // Backspace right after a space only removed the space, which the
+      // formatter would put straight back — delete the digit before it instead.
+      if (event.inputType === "deleteContentBackward" && countDigits(value) === countDigits(formatPhone(this.modelValue))) {
+        const before = value.slice(0, el.selectionStart).replace(/\d(\D*)$/, "$1");
+        value = before + value.slice(el.selectionStart);
+        caretDigits = countDigits(before);
+      }
+      const formatted = formatPhone(value);
+      el.value = formatted;
+      let pos = 0;
+      for (let seen = 0; pos < formatted.length && seen < caretDigits; pos += 1) {
+        if (/\d/.test(formatted[pos])) seen += 1;
+      }
+      el.setSelectionRange(pos, pos);
+      this.$emit("update:modelValue", formatted);
+    },
     stepBy(direction) {
       const current = Number(this.modelValue) || 0;
       this.$emit("update:modelValue", String(current + direction * this.step));

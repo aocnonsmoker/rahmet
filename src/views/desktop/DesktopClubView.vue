@@ -32,6 +32,7 @@
 
     <!-- ===================== Клиенты / абонементы ===================== -->
     <div v-if="tab === 'clients'" class="tab-panel wide">
+      <SearchInput v-model="clientSearch" class="panel-search" />
       <div class="cards-grid">
         <div v-for="c in visibleClients" :key="c.id" class="record-card" @click="onClientClick(c)">
           <div class="record-bar" :style="{ background: clientStatusColor(c.id) }"></div>
@@ -42,12 +43,12 @@
                 <span class="status-pill-icon">{{ statusIcon(clientStatus(c.id)) }}</span>{{ clientStatusLabel(c.id) }}
               </span>
             </div>
-            <div class="record-sub">{{ c.phone }}<span v-if="c.age"> · {{ c.age }} лет</span><span v-if="c.contract_number"> · №{{ c.contract_number }}</span></div>
+            <div class="record-sub">{{ formatPhone(c.phone) }}<span v-if="c.age != null"> · {{ ageLabel(c.age) }}</span><span v-if="c.contract_number"> · №{{ c.contract_number }}</span></div>
             <div class="record-sub">{{ clientActiveSummary(c.id) }}</div>
             <div v-if="c.note" class="client-note">📝 {{ c.note }}</div>
           </div>
         </div>
-        <div v-if="!visibleClients.length" class="empty-state">{{ selectedGroupId ? 'Нет клиентов в этой секции' : 'Нет клиентов' }}</div>
+        <div v-if="!visibleClients.length" class="empty-state">{{ clientSearch.trim() ? 'Никого не найдено' : selectedGroupId ? 'Нет клиентов в этой секции' : 'Нет клиентов' }}</div>
       </div>
     </div>
 
@@ -121,7 +122,7 @@
               <tr v-for="row in attendanceRows" :key="row.client_id">
                 <td class="att-name-col att-name-clickable" @click="onJournalClientClick(row)">
                   <div class="att-name">{{ row.full_name }}</div>
-                  <div v-if="row.phone" class="att-phone">{{ row.phone }}</div>
+                  <div v-if="row.phone" class="att-phone">{{ formatPhone(row.phone) }}</div>
                   <div v-if="journalMembershipStatus(row)" class="att-membership-line">
                     <span class="status-pill mini" :class="journalMembershipStatus(row).status">
                       <span class="status-pill-icon">{{ statusIcon(journalMembershipStatus(row).status) }}</span>{{ journalPillText(journalMembershipStatus(row)) }}
@@ -165,6 +166,7 @@
         <button class="pill-toggle-btn" type="button" :class="{ active: showAllTrialDates }" @click="showAllTrialDates = !showAllTrialDates">За все даты</button>
         <FormSelect class="trial-status-filter" placeholder="Все статусы" :model-value="selectedTrialStatus" :options="trialStatusFilterOptions" @update:modelValue="selectedTrialStatus = $event" />
       </div>
+      <SearchInput v-model="trialSearch" class="panel-search" />
       <DesktopModal v-model="showTrialDateModal" title="Выберите дату">
         <MonthCalendar :model-value="trialDate" :events="trialLessonsForBadges" @update:modelValue="onPickTrialDate" />
       </DesktopModal>
@@ -173,13 +175,13 @@
           <div class="record-bar" :style="{ background: groupColor(t.resource_id) }"></div>
           <div class="record-body">
             <div class="record-title">{{ t.full_name }}</div>
-            <div class="record-sub">{{ t.phone }}<span v-if="t.age"> · {{ t.age }} лет</span></div>
+            <div class="record-sub">{{ formatPhone(t.phone) }}<span v-if="t.age != null && t.age !== ''"> · {{ ageLabel(t.age) }}</span></div>
             <div class="record-sub">{{ t.resource_id ? groupLabel(t.resource_id) : 'Группа не выбрана' }}</div>
             <div class="record-sub">{{ formatDateTime(t.scheduled_at) }}</div>
             <span class="status-badge" :class="t.status">{{ trialStatusLabel(t.status) }}</span>
           </div>
         </div>
-        <div v-if="!trialLessonsForDay.length" class="empty-state">{{ showAllTrialDates ? 'Нет записей на пробные занятия' : 'Нет записей на пробные занятия в этот день' }}</div>
+        <div v-if="!trialLessonsForDay.length" class="empty-state">{{ trialSearch.trim() ? 'Никого не найдено' : showAllTrialDates ? 'Нет записей на пробные занятия' : 'Нет записей на пробные занятия в этот день' }}</div>
       </div>
     </div>
 
@@ -189,7 +191,8 @@
         <FormSelect v-if="!editingClientId && templateClientOptions.length" label="Заполнить по клиенту (та же семья)" placeholder="Не выбрано" :model-value="clientForm.template_client_id" :options="templateClientOptions" @update:modelValue="applyClientTemplate" />
         <FormInput label="ФИО" type="text" :model-value="clientForm.full_name" @update:modelValue="clientForm.full_name = $event" />
         <FormInput label="Телефон" type="tel" :model-value="clientForm.phone" @update:modelValue="clientForm.phone = $event" />
-        <FormInput label="Возраст" type="number" :model-value="clientForm.age" @update:modelValue="clientForm.age = $event" />
+        <FormInput label="Дата рождения" type="date" :model-value="clientForm.birth_date" @update:modelValue="clientForm.birth_date = $event" />
+        <div v-if="clientFormAgeHint" class="field-hint">{{ clientFormAgeHint }}</div>
         <FormInput label="ФИО родителя/опекуна" type="text" :model-value="clientForm.parent_name" @update:modelValue="clientForm.parent_name = $event" />
         <FormInput label="Примечание" type="textarea" :model-value="clientForm.note" @update:modelValue="clientForm.note = $event" />
 
@@ -298,6 +301,10 @@ import { refreshOutline } from 'ionicons/icons';
 import DesktopModal from '@/components/desktop/DesktopModal.vue';
 import FormInput from '@/components/FormInput.vue';
 import FormSelect from '@/components/FormSelect.vue';
+import SearchInput from '@/components/SearchInput.vue';
+import { matchesPersonSearch } from '@/services/personSearch';
+import { formatPhone } from '@/services/phone';
+import { ageFromBirthDate, ageLabel } from '@/services/age';
 import PhotoCropper from '@/components/PhotoCropper.vue';
 import MonthCalendar from '@/components/MonthCalendar.vue';
 import ScheduleCalendar from '@/components/ScheduleCalendar.vue';
@@ -343,7 +350,7 @@ const TRIAL_STATUS_LABELS = {
 
 export default {
   name: 'DesktopClubView',
-  components: { IonPage, IonIcon, DesktopModal, FormInput, FormSelect, PhotoCropper, MonthCalendar, ScheduleCalendar },
+  components: { IonPage, IonIcon, DesktopModal, FormInput, FormSelect, SearchInput, PhotoCropper, MonthCalendar, ScheduleCalendar },
   props: {
     sectionKey: { type: String, required: true },
     label: { type: String, required: true },
@@ -378,6 +385,8 @@ export default {
       trialDate: moment().format('YYYY-MM-DD'),
       showAllTrialDates: false,
       selectedTrialStatus: null,
+      clientSearch: '',
+      trialSearch: '',
 
       showTrainerModal: false,
       editingTrainerId: null,
@@ -404,11 +413,19 @@ export default {
       const client = this.clients.find((c) => c.id === this.membershipClientId);
       return client ? client.note : null;
     },
+    // Age is derived from the birth date; older cards may only have a typed-in age.
+    clientFormAgeHint() {
+      if (!this.clientForm) return '';
+      const age = ageFromBirthDate(this.clientForm.birth_date);
+      if (age != null) return `Возраст: ${ageLabel(age)}`;
+      if (!this.clientForm.birth_date && this.clientForm.age != null) return `Указан возраст ${ageLabel(this.clientForm.age)} — укажите дату рождения`;
+      return '';
+    },
     // Siblings share a parent and phone — pick an existing client to prefill them.
     templateClientOptions() {
       return this.clients
         .filter((c) => c.parent_name || c.phone)
-        .map((c) => ({ value: c.id, label: [c.full_name, [c.parent_name, c.phone].filter(Boolean).join(' · ')].join(' — ') }));
+        .map((c) => ({ value: c.id, label: [c.full_name, [c.parent_name, formatPhone(c.phone)].filter(Boolean).join(' · ')].join(' — ') }));
     },
     groupOptions() {
       return this.groups.map((g) => ({ value: g.id, label: g.label, color: g.color }));
@@ -420,8 +437,9 @@ export default {
       return [{ value: null, label: 'Все секции' }, ...this.groups.map((g) => ({ value: g.id, label: g.label, color: g.color }))];
     },
     visibleClients() {
-      if (!this.selectedGroupId) return this.clients;
-      return this.clients.filter((c) => this.clientMemberships(c.id).some((m) => m.resource_ids.includes(this.selectedGroupId)));
+      return this.clients
+        .filter((c) => !this.selectedGroupId || this.clientMemberships(c.id).some((m) => m.resource_ids.includes(this.selectedGroupId)))
+        .filter((c) => matchesPersonSearch(c, this.clientSearch));
     },
     visibleTrainers() {
       if (!this.selectedGroupId) return this.trainers;
@@ -446,9 +464,11 @@ export default {
     },
     trialLessonsForDay() {
       return this.trialLessons
-        .filter((t) => this.showAllTrialDates || t.scheduled_at.slice(0, 10) === this.trialDate)
+        // A search looks across all dates — the person is usually booked on another day.
+        .filter((t) => this.showAllTrialDates || this.trialSearch.trim() || t.scheduled_at.slice(0, 10) === this.trialDate)
         .filter((t) => !this.selectedGroupId || t.resource_id === this.selectedGroupId)
         .filter((t) => !this.selectedTrialStatus || t.status === this.selectedTrialStatus)
+        .filter((t) => matchesPersonSearch(t, this.trialSearch))
         .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
     },
     monthLabel() {
@@ -511,6 +531,8 @@ export default {
     },
   },
   methods: {
+    formatPhone,
+    ageLabel,
     async refresh() {
       await Promise.all([
         this.loadGroups(),
@@ -694,6 +716,7 @@ export default {
         full_name: '',
         phone: '+7',
         age: null,
+        birth_date: '',
         parent_name: '',
         contract_number: String(this.nextContractNumber()),
         contract_date: moment().format('YYYY-MM-DD'),
@@ -735,6 +758,7 @@ export default {
         full_name: c.full_name,
         phone: c.phone,
         age: c.age,
+        birth_date: c.birth_date || '',
         parent_name: c.parent_name,
         contract_number: c.contract_number || '',
         contract_date: c.contract_date ? moment(c.contract_date).format('YYYY-MM-DD') : '',
@@ -1299,6 +1323,10 @@ export default {
   font-weight: 600;
 }
 
+.panel-search {
+  max-width: 420px;
+}
+
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -1448,6 +1476,13 @@ export default {
   font-size: 0.85rem;
   color: #64748b;
   margin-top: 2px;
+}
+
+.field-hint {
+  margin: -8px 0 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6a6f75;
 }
 
 .client-note {
